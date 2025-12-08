@@ -46,31 +46,57 @@ export default class TypeZen extends Plugin {
 	}
 
 	fullscreenMode() {
-		// Use ItemView for multiple view types (previously it was only MarkdownView)
-		const leaf = this.app.workspace.getActiveViewOfType(ItemView).leaf;
-		if (!leaf) return;
-		// Don't trigger fullscreen mode when current leaf is empty.
-		if(leaf.view.getViewType() === "empty") return;
+		// Get the active leaf
+		const leaf = this.app.workspace.getActiveViewOfType(ItemView)?.leaf;
+		if (!leaf || leaf.view.getViewType() === "empty") return;
 
-		const root = document.documentElement
-		root.style.setProperty('--fadeIn-duration', this.settings.animationDuration + 's')
-		root.style.setProperty('--vignette-opacity', this.settings.vignetteOpacity)
-		root.style.setProperty('--vignette-scale-linear', this.settings.vignetteScaleLinear + '%')
-		root.style.setProperty('--vignette-scale-radial', this.settings.vignetteScaleRadial + '%')
-		
-		const containerEl = leaf.containerEl;
+		// Update root CSS variables for vignette and animation
+		const root = document.documentElement;
+		root.style.setProperty('--fadeIn-duration', this.settings.animationDuration + 's');
+		root.style.setProperty('--vignette-opacity', this.settings.vignetteOpacity.toString());
+		root.style.setProperty('--vignette-scale-linear', this.settings.vignetteScaleLinear + '%');
+		root.style.setProperty('--vignette-scale-radial', this.settings.vignetteScaleRadial + '%');
 
-		if (!document.fullscreenElement){
-			containerEl.requestFullscreen();
-			this.addStyles(leaf)
-		} else {
-			document.exitFullscreen();
-			this.removeStyles(leaf)
+		const workspaceEl = this.app.workspace.containerEl;
+		const isActive = workspaceEl.classList.contains('typezen-fullscreen');
+
+		// Get Electron window safely
+		let win: any = null;
+		try {
+			win = (this.app as any).workspace.getHostWindow?.() || (window as any).require?.('electron')?.remote?.getCurrentWindow?.();
+		} catch (e) {
+			win = null;
 		}
-		containerEl.onfullscreenchange = () => {
-			if (!document.fullscreenElement){
-				this.removeStyles(leaf)
-			}
+
+		if (!isActive) {
+			// Enter simulated fullscreen
+			workspaceEl.classList.add('typezen-fullscreen');
+			this.addStyles(leaf);
+
+			// Enter native fullscreen if window object available
+			if (win?.setFullScreen) win.setFullScreen(true);
+
+			// Add animation class to workspace for fade-in
+			workspaceEl.classList.add('animate');
+
+			// Escape key listener to exit
+			const escapeHandler = (e: KeyboardEvent) => {
+				if (e.key === 'Escape') {
+					workspaceEl.classList.remove('typezen-fullscreen');
+					workspaceEl.classList.remove('animate');
+					this.removeStyles(leaf);
+					if (win?.setFullScreen) win.setFullScreen(false);
+					document.removeEventListener('keydown', escapeHandler);
+				}
+			};
+			document.addEventListener('keydown', escapeHandler);
+
+		} else {
+			// Exit fullscreen
+			workspaceEl.classList.remove('typezen-fullscreen');
+			workspaceEl.classList.remove('animate');
+			this.removeStyles(leaf);
+			if (win?.setFullScreen) win.setFullScreen(false);
 		}
 	}
 

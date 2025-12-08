@@ -54,3 +54,33 @@
 		transform: scale(1);
 	}
 }
+
+/* Fullscreen writing mode (TypeZen) */
+.typezen-fullscreen .workspace-leaf {
+	position: fixed !important;
+	top: 0;
+	left: 0;
+	width: 100% !important;
+	height: 100% !important;
+	z-index: 15;
+	background: var(--background-primary);
+	overflow: hidden; /* hides native scrollbars */
+}
+
+/* Hide other leaves/panes but keep editor interactive */
+.typezen-fullscreen .workspace-split > .workspace-leaf:not(.active) {
+	display: none !important;
+}
+
+/* Keep status bar visible */
+.typezen-fullscreen .status-bar {
+	position: relative !important;
+	display: flex !important;
+	z-index: 20; /* above everything */
+}
+
+/* Optional: keep header hidden or animated */
+.typezen-fullscreen .workspace-ribbon,
+.typezen-fullscreen .workspace-leaf-header {
+	display: none !important;
+}
