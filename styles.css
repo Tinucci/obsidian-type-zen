@@ -5,8 +5,17 @@
 	--vignette-scale-radial: 50%;
 }
 
-.noscroll ::-webkit-scrollbar-thumb{
-	visibility: hidden;
+.cm-scroller-wrapper {
+    width: 100%;
+    height: 100%;
+    overflow: hidden !important;
+    position: relative;
+}
+
+.cm-scroller.noscroll-native {
+    overflow: hidden !important;
+    padding-right: 0 !important;
+    padding-bottom: 0 !important;
 }
 
 .vignette-linear {

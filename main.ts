@@ -74,6 +74,54 @@ export default class TypeZen extends Plugin {
 		}
 	}
 
+	private applyNoScroll(leaf: WorkspaceLeaf) {
+		const viewEl = leaf.view.contentEl;
+		const scroller = viewEl.querySelector('.cm-scroller') as HTMLElement;
+		if (!scroller) return;
+
+		// Avoid double-wrapping
+		if (scroller.parentElement?.classList.contains('cm-scroller-wrapper')) return;
+
+		const wrapper = document.createElement('div');
+		wrapper.classList.add('cm-scroller-wrapper');
+
+		scroller.parentElement?.insertBefore(wrapper, scroller);
+		wrapper.appendChild(scroller);
+
+		scroller.classList.add('noscroll-native');
+
+		const wheelHandler = (ev: WheelEvent) => {
+			scroller.scrollTop += ev.deltaY;
+			scroller.scrollLeft += ev.deltaX;
+			ev.preventDefault();
+		};
+
+		wrapper.addEventListener('wheel', wheelHandler, { passive: false });
+
+		(scroller as any)._wrapper = wrapper;
+		(scroller as any)._wheelHandler = wheelHandler;
+	}
+
+	private removeNoScroll(leaf: WorkspaceLeaf) {
+		const viewEl = leaf.view.contentEl;
+		const scroller = viewEl.querySelector('.cm-scroller') as HTMLElement;
+		if (!scroller) return;
+
+		const wrapper = (scroller as any)._wrapper as HTMLElement | undefined;
+		const wheelHandler = (scroller as any)._wheelHandler as EventListener | undefined;
+
+		if (wrapper && wheelHandler) {
+			wrapper.removeEventListener('wheel', wheelHandler);
+			wrapper.parentElement?.insertBefore(scroller, wrapper);
+			wrapper.remove();
+		}
+
+		scroller.classList.remove('noscroll-native');
+
+		delete (scroller as any)._wrapper;
+		delete (scroller as any)._wheelHandler;
+	}
+
 	addStyles(leaf: WorkspaceLeaf) {
 		const viewEl = leaf.view.contentEl
 		const header = leaf.view.headerEl
@@ -81,7 +129,9 @@ export default class TypeZen extends Plugin {
 
 		let graphControls: HTMLElement;
 		if (isGraph) { graphControls = leaf.view.dataEngine.controlsEl}
-		if (!this.settings.showScroll){	viewEl.classList.add("noscroll") }
+		if (!this.settings.showScroll) {
+			this.applyNoScroll(leaf);
+		}
 		if (isGraph && !this.settings.showGraphControls) { graphControls.classList.add("hide") }
 		isGraph ? viewEl.classList.add("vignette-radial") : viewEl.classList.add("vignette-linear")
 		if (!isGraph && this.settings.forceReadable) { leaf.view.editMode.editorEl.classList.add("is-readable-line-width") }
@@ -105,8 +155,10 @@ export default class TypeZen extends Plugin {
 			leaf.view.editMode.editorEl.classList.remove("is-readable-line-width")
 		}
 
-		viewEl.classList.remove("vignette-linear", "vignette-radial", "animate", "noscroll")
+		viewEl.classList.remove("vignette-linear", "vignette-radial", "animate")
 		header.classList.remove("animate", "hide")
+
+		this.removeNoScroll(leaf);
 	}
 }
 
