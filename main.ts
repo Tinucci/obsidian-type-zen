@@ -22,7 +22,7 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	vignetteScaleRadial: 75
 }
 
-export default class Prozen extends Plugin {
+export default class TypeZen extends Plugin {
 	settings: PluginSettings;
 
 	async onload() {
@@ -32,7 +32,7 @@ export default class Prozen extends Plugin {
 			name: "Zen mode",
 			callback: this.fullscreenMode.bind(this),
 		});
-		this.addSettingTab(new ProzenSettingTab(this.app, this));
+		this.addSettingTab(new TypeZenSettingTab(this.app, this));
 	}
 
 	onunload() {}
@@ -110,10 +110,10 @@ export default class Prozen extends Plugin {
 	}
 }
 
-class ProzenSettingTab extends PluginSettingTab {
-	plugin: Prozen;
+class TypeZenSettingTab extends PluginSettingTab {
+	plugin: TypeZen;
 
-	constructor(app: App, plugin: Prozen) {
+	constructor(app: App, plugin: TypeZen) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
