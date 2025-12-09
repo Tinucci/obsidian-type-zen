@@ -192,7 +192,7 @@ export default class TypeZen extends Plugin {
 		};
 
 		// Events that reasonably indicate selection/caret changes
-		const events = ['keyup', 'mouseup', 'pointerup', 'input'];
+		const events = ['keydown', 'mouseup', 'pointerup', 'input'];
 
 		// Bind handlers
 		const bound = (ev: Event) => {
