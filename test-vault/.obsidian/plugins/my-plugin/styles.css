@@ -1,0 +1,86 @@
+:root {
+	--vignette-opacity: 1;
+	--fadeIn-duration: "2s";
+	--vignette-scale-linear: 20%;
+	--vignette-scale-radial: 50%;
+}
+
+.cm-scroller-wrapper {
+    width: 100%;
+    height: 100%;
+    overflow: hidden !important;
+    position: relative;
+}
+
+.cm-scroller.noscroll-native {
+    overflow: hidden !important;
+    padding-right: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+.vignette-linear {
+	background: linear-gradient(
+		90deg,
+		rgba(0, 0, 0, var(--vignette-opacity)) 0%,
+		rgba(0, 0, 0, 0) var(--vignette-scale-linear),
+		rgba(0, 0, 0, 0) calc(100% - var(--vignette-scale-linear)),
+		rgba(0, 0, 0, var(--vignette-opacity)) 100%
+	);
+}
+
+.vignette-radial {
+	background: radial-gradient(
+		circle,
+		rgba(0, 0, 0, 0) calc(100% - var(--vignette-scale-radial)),
+		rgba(0, 0, 0, var(--vignette-opacity)) 100%
+	);
+}
+
+.animate {
+	animation: fadeIn var(--fadeIn-duration);
+}
+
+.hide {
+	display: none !important;
+}
+
+@keyframes fadeIn {
+	0% {
+		opacity: 0;
+		transform: scale(1.05);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+/* Fullscreen writing mode (TypeZen) */
+.typezen-fullscreen .workspace-leaf {
+	position: fixed !important;
+	top: 0;
+	left: 0;
+	width: 100% !important;
+	height: 100% !important;
+	z-index: 15;
+	background: var(--background-primary);
+	overflow: hidden; /* hides native scrollbars */
+}
+
+/* Hide other leaves/panes but keep editor interactive */
+.typezen-fullscreen .workspace-split > .workspace-leaf:not(.active) {
+	display: none !important;
+}
+
+/* Keep status bar visible */
+.typezen-fullscreen .status-bar {
+	position: relative !important;
+	display: flex !important;
+	z-index: 20; /* above everything */
+}
+
+/* Optional: keep header hidden or animated */
+.typezen-fullscreen .workspace-ribbon,
+.typezen-fullscreen .workspace-leaf-header {
+	display: none !important;
+}
