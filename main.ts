@@ -74,12 +74,6 @@ export default class TypeZen extends Plugin {
 			workspaceEl.classList.add('typezen-fullscreen');
 			this.addStyles(leaf);
 
-			// Focus editor so typing starts immediately
-			const editor = leaf.view.editMode.editor;
-			if (editor) {
-				editor.focus();
-			}
-
 			// Enter native fullscreen if window object available
 			if (win?.setFullScreen) win.setFullScreen(true);
 
@@ -97,6 +91,31 @@ export default class TypeZen extends Plugin {
 				}
 			};
 			document.addEventListener('keydown', escapeHandler);
+
+			const editor = leaf.view.editMode.editor;
+			if (editor) editor.focus();
+
+			const view: EditorView = (editor as any).cm;
+			if (!view) return;
+
+			view.dispatch({
+				selection: { anchor: view.state.doc.length},
+				scrollIntoView: false
+			});
+
+			// TODO(): Urgently change this with something better.
+			// Although it seems like at whatever point the function is called, it is still early
+			let attempts = 0;
+			const maxAttempts = 100;
+
+			const centerLoop = () => {
+				this.centerCaret(leaf);
+				attempts++;
+				// If not at desired scroll or still within max attempts, try next frame
+				if (attempts < maxAttempts) requestAnimationFrame(centerLoop);
+			};
+
+			requestAnimationFrame(centerLoop);
 
 		} else {
 			// Exit fullscreen
