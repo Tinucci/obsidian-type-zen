@@ -1,6 +1,6 @@
-# ProZen Plugin for Obsidian
+# TypeZen Plugin for Obsidian
 
-The true 'Zen' (fullscreen) mode for Obsidian.
+The true Typewriting experienze for Obsidian.
 
 ## Description
 
