@@ -162,6 +162,12 @@ export default class TypeZen extends Plugin {
 		// Find the visible scroller element (fallback to view.dom)
 		const scroller: HTMLElement = (view.dom.querySelector('.cm-scroller') as HTMLElement) || (view.dom as HTMLElement);
 
+		const lineHeight = parseFloat(getComputedStyle(view.dom).lineHeight) || 20; 
+		if (!scroller.classList.contains('typewriter-top-padding')) {
+			scroller.style.paddingTop = `${scroller.clientHeight / 2 - lineHeight / 2}px`;
+			scroller.classList.add('typewriter-top-padding');
+		}
+
 		// Helper: center caret vertically in scroller
 		const centerCaret = () => {
 			try {
@@ -209,6 +215,11 @@ export default class TypeZen extends Plugin {
 		// Store cleanup handles on view so disable is simple
 		(view as any)._typewriterCleanup = () => {
 			for (const evName of events) view.dom.removeEventListener(evName, bound);
+
+			// --- Remove top padding ---
+			scroller.style.paddingTop = '';
+			scroller.classList.remove('typewriter-top-padding');
+
 			delete (view as any)._typewriterCleanup;
 			delete (view as any)._typewriterActive;
 		};
