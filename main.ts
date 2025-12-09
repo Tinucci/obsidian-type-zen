@@ -1,4 +1,5 @@
 import { App, ItemView, Plugin, PluginSettingTab, Setting, WorkspaceLeaf } from "obsidian";
+import { EditorView } from "@codemirror/view";
 
 interface PluginSettings {
 	animationDuration: number,
@@ -148,6 +149,82 @@ export default class TypeZen extends Plugin {
 		delete (scroller as any)._wheelHandler;
 	}
 
+	private enableTypewriter(leaf: WorkspaceLeaf) {
+		// Defensive lookups for current editor/view
+		const cmWrapper = (leaf.view as any).editMode?.editor;
+		const view: EditorView | undefined = cmWrapper?.cm;
+		if (!view) return;
+
+		// Avoid double registration
+		if ((view as any)._typewriterActive) return;
+		(view as any)._typewriterActive = true;
+
+		// Find the visible scroller element (fallback to view.dom)
+		const scroller: HTMLElement = (view.dom.querySelector('.cm-scroller') as HTMLElement) || (view.dom as HTMLElement);
+
+		// Helper: center caret vertically in scroller
+		const centerCaret = () => {
+			try {
+				// current caret position (doc offset)
+				const pos = view.state.selection.main.head;
+				// Get coordinates for that position (relative to viewport)
+				const coords = view.coordsAtPos(pos);
+				if (!coords) return;
+
+				const scrollerRect = scroller.getBoundingClientRect();
+
+				// Height of caret line (use coords.bottom - coords.top as best estimate)
+				const lineHeight = Math.max(1, coords.bottom - coords.top);
+
+				// Compute absolute offset to target scroll top so that caret's center is at scroller center
+				const caretTopInScroller = coords.top - scrollerRect.top + scroller.scrollTop;
+				const target = caretTopInScroller - (scroller.clientHeight / 2) + (lineHeight / 2);
+
+				// Avoid NaN or small differences being forced repeatedly
+				if (!Number.isFinite(target)) return;
+
+				// Apply without smooth behavior to avoid visual jump issues
+				scroller.scrollTo({ top: target, behavior: 'auto' });
+			} catch (e) {
+				// Best-effort only. Silence any unexpected runtime errors.
+				// (Do not throw — we must remain non-destructive to existing behavior.)
+			}
+		};
+
+		// Events that reasonably indicate selection/caret changes
+		const events = ['keyup', 'mouseup', 'pointerup', 'input'];
+
+		// Bind handlers
+		const bound = (ev: Event) => {
+			// For keyboard, we care about navigation keys too (arrows, page up/down)
+			// but key detection is not necessary: center on any keyup/input
+			centerCaret();
+		};
+
+		for (const evName of events) view.dom.addEventListener(evName, bound, { passive: true });
+
+		// Also do an initial centering right away
+		centerCaret();
+
+		// Store cleanup handles on view so disable is simple
+		(view as any)._typewriterCleanup = () => {
+			for (const evName of events) view.dom.removeEventListener(evName, bound);
+			delete (view as any)._typewriterCleanup;
+			delete (view as any)._typewriterActive;
+		};
+	}
+
+	private disableTypewriter(leaf: WorkspaceLeaf) {
+		const cmWrapper = (leaf.view as any).editMode?.editor;
+		const view: EditorView | undefined = cmWrapper?.cm;
+		if (!view) return;
+
+		const cleanup = (view as any)._typewriterCleanup as (() => void) | undefined;
+		if (typeof cleanup === 'function') {
+			try { cleanup(); } catch (e) { /* ignore */ }
+		}
+	}
+
 	addStyles(leaf: WorkspaceLeaf) {
 		const viewEl = leaf.view.contentEl
 		const header = leaf.view.headerEl
@@ -162,10 +239,10 @@ export default class TypeZen extends Plugin {
 		isGraph ? viewEl.classList.add("vignette-radial") : viewEl.classList.add("vignette-linear")
 		if (!isGraph && this.settings.forceReadable) { leaf.view.editMode.editorEl.classList.add("is-readable-line-width") }
 
-		
+		this.enableTypewriter(leaf);
+
 		viewEl.classList.add("animate")
 		this.settings.showHeader ? header.classList.add("animate") : header.classList.add("hide")
-
 	}
 
 	removeStyles(leaf: WorkspaceLeaf) {
@@ -185,6 +262,8 @@ export default class TypeZen extends Plugin {
 		header.classList.remove("animate", "hide")
 
 		this.removeNoScroll(leaf);
+
+		this.disableTypewriter(leaf);
 	}
 }
 
