@@ -233,9 +233,16 @@ export default class TypeZen extends Plugin {
 
 		// Bind handlers
 		const bound = (ev: Event) => {
-			// For keyboard, we care about navigation keys too (arrows, page up/down)
-			// but key detection is not necessary: center on any keyup/input
-			this.centerCaret(leaf);
+			const cmWrapper = (leaf.view as any).editMode?.editor;
+			const view: EditorView | undefined = cmWrapper?.cm;
+			if (!view) return;
+
+			const selection = view.state.selection.main;
+
+			// Only center if there is no selection (caret only)
+			if (selection.from === selection.to) {
+				this.centerCaret(leaf);
+			}
 		};
 
 		for (const evName of events) view.dom.addEventListener(evName, bound, { passive: true });
