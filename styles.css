@@ -1,8 +1,9 @@
 :root {
 	--vignette-opacity: 1;
 	--fadeIn-duration: 2s;
-	--vignette-scale-linear: 20%;
+	--vignette-scale-linear: 30%;
 	--vignette-scale-radial: 50%;
+	--vignette-exponent: 2;       /* exponent for falloff */
 }
 
 .cm-scroller-wrapper {
@@ -19,13 +20,54 @@
 }
 
 .vignette-linear {
-	background: linear-gradient(
-		90deg,
-		rgba(0, 0, 0, var(--vignette-opacity)) 0%,
-		rgba(0, 0, 0, 0) var(--vignette-scale-linear),
-		rgba(0, 0, 0, 0) calc(100% - var(--vignette-scale-linear)),
-		rgba(0, 0, 0, var(--vignette-opacity)) 100%
-	);
+    position: absolute; /* Ensure it sits on top */
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none; /* Let clicks pass through */
+    z-index: 100;
+    
+    background: linear-gradient(
+        90deg,
+        /* --- LEFT SIDE (Fade Out) --- */
+        rgba(0, 0, 0, var(--vignette-opacity)) 
+            0%,
+
+        rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.8, var(--vignette-exponent)))) 
+            calc(var(--vignette-scale-linear) * 0.2),
+
+        rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.6, var(--vignette-exponent)))) 
+            calc(var(--vignette-scale-linear) * 0.4),
+
+        rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.4, var(--vignette-exponent)))) 
+            calc(var(--vignette-scale-linear) * 0.6),
+
+        rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.2, var(--vignette-exponent)))) 
+            calc(var(--vignette-scale-linear) * 0.8),
+
+        rgba(0, 0, 0, 0) 
+            var(--vignette-scale-linear),
+
+
+        /* --- MIDDLE (Transparent) --- */
+        rgba(0, 0, 0, 0) 
+            calc(100% - var(--vignette-scale-linear)),
+
+
+        /* --- RIGHT SIDE (Fade In) --- */
+        rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.2, var(--vignette-exponent)))) 
+            calc(100% - (var(--vignette-scale-linear) * 0.8)),
+
+        rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.4, var(--vignette-exponent)))) 
+            calc(100% - (var(--vignette-scale-linear) * 0.6)),
+
+        rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.6, var(--vignette-exponent)))) 
+            calc(100% - (var(--vignette-scale-linear) * 0.4)),
+
+        rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.8, var(--vignette-exponent)))) 
+            calc(100% - (var(--vignette-scale-linear) * 0.2)),
+
+        rgba(0, 0, 0, var(--vignette-opacity)) 
+            100%
+    );
 }
 
 .vignette-radial {
