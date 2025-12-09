@@ -74,6 +74,12 @@ export default class TypeZen extends Plugin {
 			workspaceEl.classList.add('typezen-fullscreen');
 			this.addStyles(leaf);
 
+			// Focus editor so typing starts immediately
+			const editor = leaf.view.editMode.editor;
+			if (editor) {
+				editor.focus();
+			}
+
 			// Enter native fullscreen if window object available
 			if (win?.setFullScreen) win.setFullScreen(true);
 
@@ -149,6 +155,41 @@ export default class TypeZen extends Plugin {
 		delete (scroller as any)._wheelHandler;
 	}
 
+	// Helper: center caret vertically in scroller
+	private centerCaret(leaf: WorkspaceLeaf) {
+		try {
+			const cmWrapper = (leaf.view as any).editMode?.editor;
+			const view: EditorView | undefined = cmWrapper?.cm;
+			if (!view) return;
+
+			const scroller: HTMLElement = (view.dom.querySelector('.cm-scroller') as HTMLElement) || (view.dom as HTMLElement);
+
+			// current caret position (doc offset)
+			const pos = view.state.selection.main.head;
+			// Get coordinates for that position (relative to viewport)
+			const coords = view.coordsAtPos(pos);
+			if (!coords) return;
+
+			const scrollerRect = scroller.getBoundingClientRect();
+
+			// Height of caret line (use coords.bottom - coords.top as best estimate)
+			const lineHeight = Math.max(1, coords.bottom - coords.top);
+
+			// Compute absolute offset to target scroll top so that caret's center is at scroller center
+			const caretTopInScroller = coords.top - scrollerRect.top + scroller.scrollTop;
+			const target = caretTopInScroller - (scroller.clientHeight / 2) + (lineHeight / 2);
+
+			// Avoid NaN or small differences being forced repeatedly
+			if (!Number.isFinite(target)) return;
+
+			// Apply without smooth behavior to avoid visual jump issues
+			scroller.scrollTo({ top: target, behavior: 'auto' });
+		} catch (e) {
+			// Best-effort only. Silence any unexpected runtime errors.
+			// (Do not throw — we must remain non-destructive to existing behavior.)
+		}
+	};
+
 	private enableTypewriter(leaf: WorkspaceLeaf) {
 		// Defensive lookups for current editor/view
 		const cmWrapper = (leaf.view as any).editMode?.editor;
@@ -168,35 +209,6 @@ export default class TypeZen extends Plugin {
 			scroller.classList.add('typewriter-top-padding');
 		}
 
-		// Helper: center caret vertically in scroller
-		const centerCaret = () => {
-			try {
-				// current caret position (doc offset)
-				const pos = view.state.selection.main.head;
-				// Get coordinates for that position (relative to viewport)
-				const coords = view.coordsAtPos(pos);
-				if (!coords) return;
-
-				const scrollerRect = scroller.getBoundingClientRect();
-
-				// Height of caret line (use coords.bottom - coords.top as best estimate)
-				const lineHeight = Math.max(1, coords.bottom - coords.top);
-
-				// Compute absolute offset to target scroll top so that caret's center is at scroller center
-				const caretTopInScroller = coords.top - scrollerRect.top + scroller.scrollTop;
-				const target = caretTopInScroller - (scroller.clientHeight / 2) + (lineHeight / 2);
-
-				// Avoid NaN or small differences being forced repeatedly
-				if (!Number.isFinite(target)) return;
-
-				// Apply without smooth behavior to avoid visual jump issues
-				scroller.scrollTo({ top: target, behavior: 'auto' });
-			} catch (e) {
-				// Best-effort only. Silence any unexpected runtime errors.
-				// (Do not throw — we must remain non-destructive to existing behavior.)
-			}
-		};
-
 		// Events that reasonably indicate selection/caret changes
 		const events = ['keydown', 'mouseup', 'pointerup', 'input'];
 
@@ -204,13 +216,13 @@ export default class TypeZen extends Plugin {
 		const bound = (ev: Event) => {
 			// For keyboard, we care about navigation keys too (arrows, page up/down)
 			// but key detection is not necessary: center on any keyup/input
-			centerCaret();
+			this.centerCaret(leaf);
 		};
 
 		for (const evName of events) view.dom.addEventListener(evName, bound, { passive: true });
 
 		// Also do an initial centering right away
-		centerCaret();
+		this.centerCaret(leaf);
 
 		// Store cleanup handles on view so disable is simple
 		(view as any)._typewriterCleanup = () => {
