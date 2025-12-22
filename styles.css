@@ -121,3 +121,23 @@
 .typezen-fullscreen .workspace-leaf-header {
 	display: none !important;
 }
+
+/* Making lists not have bullet points and instead have dashes */
+.typezen-fullscreen .list-bullet:after {
+    content: '\2010';
+    border-radius: 0;
+    width: 0;
+}
+
+.typezen-fullscreen .list-bullet:before {
+    display: none;
+}
+
+.typezen-fullscreen .list-bullet {
+    color: var(--text-normal);
+}
+
+.typezen-fullscreen .cm-formatting-list .list-bullet:after {
+    display: none;
+}
+/* End of making lists not have bullet points and instead have dashes */
