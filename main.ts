@@ -15,10 +15,6 @@ interface PluginSettings {
 	caretVerticalPosition: number;
 }
 
-interface HostWindow {
-	setFullScreen?: (fullscreen: boolean) => void;
-}
-
 interface TypeZenItemView extends ItemView {
 	headerEl: HTMLElement;
 	editMode?: {
@@ -169,7 +165,6 @@ export default class TypeZen extends Plugin {
 		this.zenLeaf = leaf;
 		this.applyZenSettings();
 		this.addStyles(leaf);
-		this.setNativeFullscreen(true);
 		this.bindEscapeHandler();
 		this.waitForEditor(leaf);
 	}
@@ -191,7 +186,6 @@ export default class TypeZen extends Plugin {
 			this.removeStyles(leaf);
 		}
 
-		this.setNativeFullscreen(false);
 		this.zenLeaf = null;
 		this.restoreCssVariables();
 
@@ -279,16 +273,6 @@ export default class TypeZen extends Plugin {
 		if (!this.escapeHandler) return;
 		document.removeEventListener("keydown", this.escapeHandler);
 		this.escapeHandler = null;
-	}
-
-	private setNativeFullscreen(fullscreen: boolean) {
-		const win = this.getHostWindow();
-		win?.setFullScreen?.(fullscreen);
-	}
-
-	private getHostWindow(): HostWindow | null {
-		const workspace = this.app.workspace as { getHostWindow?: () => HostWindow };
-		return workspace.getHostWindow?.() ?? null;
 	}
 
 	private setMarkdownMode(mode: "source" | "preview") {
