@@ -83,7 +83,6 @@ export default class TypeZen extends Plugin {
 		paddingBottom: { value: string; priority: string };
 	} | null = null;
 	private waitingForKeyboardInput = false;
-	private smoothNextCenter = false;
 	private cssVariableSnapshot: Map<string, { value: string; priority: string }> | null = null;
 
 	async onload() {
@@ -521,18 +520,17 @@ export default class TypeZen extends Plugin {
 		this.typewriterResizeObserver.observe(scroller);
 
 		const listener = EditorView.updateListener.of((update) => {
-			if (update.transactions.some((transaction) => transaction.isUserEvent("select.pointer"))) {
+			const pointerSelection = update.transactions.some((transaction) => transaction.isUserEvent("select.pointer"));
+			if (pointerSelection && !update.docChanged) {
 				this.cancelCaretMotion();
 				this.waitingForKeyboardInput = true;
-				this.smoothNextCenter = false;
 				return;
 			}
-			if (!(update.selectionSet || update.docChanged)) return;
+			if (!update.docChanged) return;
 			if (update.state.selection.main.from !== update.state.selection.main.to) return;
-			if (this.waitingForKeyboardInput || !this.smoothNextCenter) return;
+			if (this.waitingForKeyboardInput) return;
 
 			this.centerCaret(leaf, "smooth");
-			this.smoothNextCenter = false;
 		});
 
 		try {
@@ -558,12 +556,10 @@ export default class TypeZen extends Plugin {
 		const onPointerDown: EventListener = () => {
 			this.cancelCaretMotion();
 			this.waitingForKeyboardInput = true;
-			this.smoothNextCenter = false;
 		};
 		const onWheel: EventListener = () => {
 			this.cancelCaretMotion();
 			this.waitingForKeyboardInput = true;
-			this.smoothNextCenter = false;
 		};
 		const onKeyDown: EventListener = (event) => {
 			const keyboardEvent = event as KeyboardEvent;
@@ -571,7 +567,6 @@ export default class TypeZen extends Plugin {
 
 			this.cancelResizeCenter();
 			this.waitingForKeyboardInput = false;
-			this.smoothNextCenter = true;
 		};
 		const onBeforeInput: EventListener = (event) => {
 			const inputType = (event as InputEvent).inputType;
@@ -579,7 +574,6 @@ export default class TypeZen extends Plugin {
 
 			this.cancelResizeCenter();
 			this.waitingForKeyboardInput = false;
-			this.smoothNextCenter = true;
 		};
 		view.dom.addEventListener("pointerdown", onPointerDown, true);
 		view.dom.addEventListener("wheel", onWheel, { capture: true, passive: true });
@@ -650,7 +644,6 @@ export default class TypeZen extends Plugin {
 		this.removeTypewriterPointerListeners();
 		this.cancelCaretMotion();
 		this.waitingForKeyboardInput = false;
-		this.smoothNextCenter = false;
 
 		const view = this.typewriterView;
 		this.typewriterView = null;
