@@ -7,4 +7,4 @@ The true typewriting experience for Obsidian.
 TypeZen is an Obsidian Plugin to enhance the typewriting experience.
 
 ## Known Issues
-- [ ] When the cursor is in the note title, typewriter scrolling does not follow it. 
+- [ ] When the cursor is in the note title, typewriter scrolling does not follow it.

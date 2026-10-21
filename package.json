@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-type-zen",
-	"version": "1.0.0",
+	"version": "0.1",
 	"description": "TypeZen: a focused typewriter mode for Obsidian",
 	"main": "main.js",
 	"scripts": {

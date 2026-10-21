@@ -313,7 +313,6 @@ export default class TypeZen extends Plugin {
 	private applyTypewriterPadding(view: EditorView, scroller: HTMLElement) {
 		const lineHeight = parseFloat(getComputedStyle(view.dom).lineHeight) || 20;
 		scroller.style.paddingTop = `${Math.max(0, scroller.clientHeight / 2 - lineHeight / 2)}px`;
-		scroller.classList.add("typewriter-top-padding");
 	}
 
 	private disableTypewriter() {
@@ -334,7 +333,6 @@ export default class TypeZen extends Plugin {
 
 		const scroller = (view.dom.querySelector(".cm-scroller") as HTMLElement | null) ?? view.dom;
 		scroller.style.paddingTop = "";
-		scroller.classList.remove("typewriter-top-padding");
 	}
 
 	private addStyles(leaf: WorkspaceLeaf) {
