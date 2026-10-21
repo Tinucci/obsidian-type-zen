@@ -47,7 +47,7 @@
 	animation: typezen-fade-in var(--fadeIn-duration) ease-out both;
 }
 
-.hide {
+.typezen-fullscreen .hide {
 	display: none !important;
 }
 
