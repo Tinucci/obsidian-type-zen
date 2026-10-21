@@ -31,6 +31,12 @@ interface TypeZenItemView extends ItemView {
 	};
 }
 
+interface TypewriterPointerListeners {
+	editorEl: HTMLElement;
+	onPointerDown: EventListener;
+	onPointerEnd: EventListener;
+}
+
 const DEFAULT_SETTINGS: PluginSettings = {
 	animationDuration: 0.25,
 	showHeader: false,
@@ -53,6 +59,7 @@ export default class TypeZen extends Plugin {
 	private typewriterView: EditorView | null = null;
 	private typewriterConfigured = new WeakSet<EditorView>();
 	private typewriterResizeObserver: ResizeObserver | null = null;
+	private typewriterPointerListeners: TypewriterPointerListeners | null = null;
 	private cssVariableSnapshot: Map<string, { value: string; priority: string }> | null = null;
 
 	async onload() {
@@ -305,7 +312,7 @@ export default class TypeZen extends Plugin {
 		}
 	}
 
-	private centerCaret(leaf: WorkspaceLeaf) {
+	private centerCaret(leaf: WorkspaceLeaf, behavior: ScrollBehavior = "auto") {
 		try {
 			const view = this.getEditorView(leaf);
 			if (!view) return;
@@ -321,7 +328,7 @@ export default class TypeZen extends Plugin {
 			const target = caretTopInScroller - scroller.clientHeight / 2 + lineHeight / 2;
 
 			if (!Number.isFinite(target)) return;
-			scroller.scrollTo({ top: target, behavior: "auto" });
+			scroller.scrollTo({ top: target, behavior });
 		} catch {
 			// Best-effort only; never throw from a scroll helper.
 		}
@@ -344,10 +351,11 @@ export default class TypeZen extends Plugin {
 		});
 		this.typewriterResizeObserver.observe(scroller);
 
+		let pointerActive = false;
 		const listener = EditorView.updateListener.of((update) => {
 			if (!(update.selectionSet || update.docChanged)) return;
 			if (update.state.selection.main.from === update.state.selection.main.to) {
-				this.centerCaret(leaf);
+				this.centerCaret(leaf, pointerActive ? "smooth" : "auto");
 			}
 		});
 
@@ -369,6 +377,17 @@ export default class TypeZen extends Plugin {
 			return;
 		}
 
+		const onPointerDown: EventListener = () => {
+			pointerActive = true;
+		};
+		const onPointerEnd: EventListener = () => {
+			pointerActive = false;
+		};
+		view.dom.addEventListener("pointerdown", onPointerDown, true);
+		document.addEventListener("pointerup", onPointerEnd);
+		document.addEventListener("pointercancel", onPointerEnd);
+		this.typewriterPointerListeners = { editorEl: view.dom, onPointerDown, onPointerEnd };
+
 		this.centerCaret(leaf);
 	}
 
@@ -380,6 +399,7 @@ export default class TypeZen extends Plugin {
 	private disableTypewriter() {
 		this.typewriterResizeObserver?.disconnect();
 		this.typewriterResizeObserver = null;
+		this.removeTypewriterPointerListeners();
 
 		const view = this.typewriterView;
 		this.typewriterView = null;
@@ -395,6 +415,16 @@ export default class TypeZen extends Plugin {
 
 		const scroller = (view.dom.querySelector(".cm-scroller") as HTMLElement | null) ?? view.dom;
 		scroller.style.paddingTop = "";
+	}
+
+	private removeTypewriterPointerListeners() {
+		const listeners = this.typewriterPointerListeners;
+		if (!listeners) return;
+
+		listeners.editorEl.removeEventListener("pointerdown", listeners.onPointerDown, true);
+		document.removeEventListener("pointerup", listeners.onPointerEnd);
+		document.removeEventListener("pointercancel", listeners.onPointerEnd);
+		this.typewriterPointerListeners = null;
 	}
 
 	private addStyles(leaf: WorkspaceLeaf) {
