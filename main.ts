@@ -11,10 +11,8 @@ interface PluginSettings {
 	vignetteOpacity: number;
 	vignetteScaleLinear: number;
 	vignetteScaleRadial: number;
-}
-
-interface HostWindow {
-	setFullScreen?: (fullscreen: boolean) => void;
+	caretScrollDuration: number;
+	caretVerticalPosition: number;
 }
 
 interface TypeZenItemView extends ItemView {
@@ -35,7 +33,6 @@ interface TypewriterPointerListeners {
 	editorEl: HTMLElement;
 	onPointerDown: EventListener;
 	onWheel: EventListener;
-	onKeyDown: EventListener;
 }
 
 const DEFAULT_SETTINGS: PluginSettings = {
@@ -47,6 +44,8 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	vignetteOpacity: 0.14,
 	vignetteScaleLinear: 20,
 	vignetteScaleRadial: 45,
+	caretScrollDuration: 240,
+	caretVerticalPosition: 50,
 };
 
 export default class TypeZen extends Plugin {
@@ -54,11 +53,19 @@ export default class TypeZen extends Plugin {
 
 	private zenLeaf: WorkspaceLeaf | null = null;
 	private escapeHandler: ((event: KeyboardEvent) => void) | null = null;
+	private sliderSettingsSaveTimer: number | null = null;
 	private centerRafId = 0;
 	private scrollAnimationFrameId = 0;
 	private resizeCenterTimer = 0;
 	private pendingCenter: { leaf: WorkspaceLeaf; behavior: ScrollBehavior } | null = null;
 	private scrollTarget: { scroller: HTMLElement; top: number } | null = null;
+	private scrollAnimation: {
+		scroller: HTMLElement;
+		from: number;
+		to: number;
+		startedAt: number;
+		duration: number;
+	} | null = null;
 	private editorObserver: MutationObserver | null = null;
 	private typewriterCompartment = new Compartment();
 	private typewriterView: EditorView | null = null;
@@ -71,8 +78,6 @@ export default class TypeZen extends Plugin {
 		paddingBottom: { value: string; priority: string };
 	} | null = null;
 	private waitingForKeyboardInput = false;
-	private smoothNextCenter = false;
-	private lastScrollAnimationTime = 0;
 	private cssVariableSnapshot: Map<string, { value: string; priority: string }> | null = null;
 
 	async onload() {
@@ -86,20 +91,52 @@ export default class TypeZen extends Plugin {
 	}
 
 	onunload() {
+		const flushSliderSettings = this.sliderSettingsSaveTimer !== null;
+		this.cancelSliderSettingsSave();
 		if (this.isZenActive()) {
 			this.exitZen();
+		}
+		if (flushSliderSettings) {
+			void this.saveData(this.settings);
 		}
 	}
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		if (!Number.isFinite(this.settings.caretScrollDuration)) {
+			this.settings.caretScrollDuration = DEFAULT_SETTINGS.caretScrollDuration;
+		}
+		this.settings.caretScrollDuration = Math.min(800, Math.max(0, this.settings.caretScrollDuration));
+		if (!Number.isFinite(this.settings.caretVerticalPosition)) {
+			this.settings.caretVerticalPosition = DEFAULT_SETTINGS.caretVerticalPosition;
+		}
+		this.settings.caretVerticalPosition = Math.min(80, Math.max(20, this.settings.caretVerticalPosition));
 	}
 
 	async saveSettings() {
+		this.cancelSliderSettingsSave();
 		await this.saveData(this.settings);
 		if (this.isZenActive()) {
 			this.applyZenSettings();
 		}
+	}
+
+	scheduleSliderSettingsSave() {
+		if (this.isZenActive()) {
+			this.applyZenSettings();
+		}
+		this.cancelSliderSettingsSave();
+		this.sliderSettingsSaveTimer = window.setTimeout(() => {
+			this.sliderSettingsSaveTimer = null;
+			void this.saveData(this.settings);
+		}, 300);
+	}
+
+	private cancelSliderSettingsSave() {
+		if (this.sliderSettingsSaveTimer === null) return;
+
+		window.clearTimeout(this.sliderSettingsSaveTimer);
+		this.sliderSettingsSaveTimer = null;
 	}
 
 	toggleZenMode() {
@@ -115,20 +152,26 @@ export default class TypeZen extends Plugin {
 	}
 
 	private isZenActive(): boolean {
-		return this.app.workspace.containerEl.classList.contains("typezen-fullscreen");
+		return this.getZenRoot().classList.contains("typezen-fullscreen");
+	}
+
+	private getZenRoot(): HTMLElement {
+		return this.app.workspace.containerEl;
 	}
 
 	private enterZen(leaf: WorkspaceLeaf) {
 		this.setMarkdownMode("source");
 		this.captureCssVariables();
 
-		const workspaceEl = this.app.workspace.containerEl;
-		workspaceEl.classList.add("typezen-fullscreen", "animate");
+		const root = this.getZenRoot();
+		root.classList.add("typezen-fullscreen");
+		requestAnimationFrame(() => {
+			if (this.isZenActive()) root.classList.add("animate");
+		});
 
 		this.zenLeaf = leaf;
 		this.applyZenSettings();
 		this.addStyles(leaf);
-		this.setNativeFullscreen(true);
 		this.bindEscapeHandler();
 		this.waitForEditor(leaf);
 	}
@@ -137,8 +180,7 @@ export default class TypeZen extends Plugin {
 		this.cancelEditorSetup();
 		this.unbindEscapeHandler();
 
-		const workspaceEl = this.app.workspace.containerEl;
-		workspaceEl.classList.remove(
+		this.getZenRoot().classList.remove(
 			"typezen-fullscreen",
 			"animate",
 			"typezen-show-header",
@@ -150,7 +192,6 @@ export default class TypeZen extends Plugin {
 			this.removeStyles(leaf);
 		}
 
-		this.setNativeFullscreen(false);
 		this.zenLeaf = null;
 		this.restoreCssVariables();
 
@@ -196,9 +237,9 @@ export default class TypeZen extends Plugin {
 	private applyZenSettings() {
 		this.applyCssVariables();
 
-		const workspaceEl = this.app.workspace.containerEl;
-		workspaceEl.classList.toggle("typezen-show-header", this.settings.showHeader);
-		workspaceEl.classList.toggle("typezen-hide-scroll", !this.settings.showScroll);
+		const root = this.getZenRoot();
+		root.classList.toggle("typezen-show-header", this.settings.showHeader);
+		root.classList.toggle("typezen-hide-scroll", !this.settings.showScroll);
 
 		const leaf = this.zenLeaf;
 		if (!leaf) return;
@@ -238,30 +279,6 @@ export default class TypeZen extends Plugin {
 		if (!this.escapeHandler) return;
 		document.removeEventListener("keydown", this.escapeHandler);
 		this.escapeHandler = null;
-	}
-
-	private setNativeFullscreen(fullscreen: boolean) {
-		const win = this.getHostWindow();
-		win?.setFullScreen?.(fullscreen);
-	}
-
-	private getHostWindow(): HostWindow | null {
-		try {
-			const workspace = this.app.workspace as { getHostWindow?: () => HostWindow };
-			if (typeof workspace.getHostWindow === "function") {
-				return workspace.getHostWindow();
-			}
-
-			const electron = (window as Window & {
-				require?: (moduleName: string) => {
-					remote?: { getCurrentWindow?: () => HostWindow };
-				};
-			}).require?.("electron");
-
-			return electron?.remote?.getCurrentWindow?.() ?? null;
-		} catch {
-			return null;
-		}
 	}
 
 	private setMarkdownMode(mode: "source" | "preview") {
@@ -330,8 +347,8 @@ export default class TypeZen extends Plugin {
 			cancelAnimationFrame(this.scrollAnimationFrameId);
 			this.scrollAnimationFrameId = 0;
 		}
-		this.lastScrollAnimationTime = 0;
 		this.scrollTarget = null;
+		this.scrollAnimation = null;
 	}
 
 	private cancelResizeCenter() {
@@ -375,14 +392,21 @@ export default class TypeZen extends Plugin {
 			const target = this.getCaretScrollTarget(request.leaf);
 			if (!target) return;
 
-			const animationActive = this.scrollAnimationFrameId !== 0;
+			let animationActive = this.scrollAnimationFrameId !== 0;
 			if (Math.abs(target.top - target.scroller.scrollTop) < 1) {
 				if (animationActive) this.scrollTarget = target;
 				return;
 			}
 
-			const shouldAnimate = request.behavior === "smooth" &&
+			const shouldAnimate = request.behavior === "smooth" && this.settings.caretScrollDuration > 0 &&
 				!window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+			if (request.behavior === "smooth" && !shouldAnimate && animationActive) {
+				cancelAnimationFrame(this.scrollAnimationFrameId);
+				this.scrollAnimationFrameId = 0;
+				this.scrollTarget = null;
+				this.scrollAnimation = null;
+				animationActive = false;
+			}
 			if (animationActive || shouldAnimate) {
 				this.scrollTarget = target;
 				this.animateCaretScroll();
@@ -409,7 +433,8 @@ export default class TypeZen extends Plugin {
 			const scrollerRect = scroller.getBoundingClientRect();
 			const lineHeight = Math.max(1, coords.bottom - coords.top);
 			const caretTop = coords.top - scrollerRect.top + scroller.scrollTop;
-			const top = caretTop - scroller.clientHeight / 2 + lineHeight / 2;
+			const position = Math.min(0.8, Math.max(0.2, this.settings.caretVerticalPosition / 100));
+			const top = caretTop - scroller.clientHeight * position + lineHeight / 2;
 
 			return Number.isFinite(top) ? { scroller, top } : null;
 		} catch {
@@ -425,26 +450,40 @@ export default class TypeZen extends Plugin {
 			const target = this.scrollTarget;
 			if (!target || !target.scroller.isConnected) {
 				this.scrollAnimationFrameId = 0;
-				this.lastScrollAnimationTime = 0;
 				this.scrollTarget = null;
+				this.scrollAnimation = null;
 				return;
 			}
 
-			const distance = target.top - target.scroller.scrollTop;
-			if (Math.abs(distance) < 0.75) {
-				target.scroller.scrollTop = target.top;
+			let animation = this.scrollAnimation;
+			if (!animation || animation.scroller !== target.scroller || Math.abs(animation.to - target.top) >= 0.5) {
+				animation = this.scrollAnimation = {
+					scroller: target.scroller,
+					from: target.scroller.scrollTop,
+					to: target.top,
+					startedAt: time,
+					duration: Math.max(0, this.settings.caretScrollDuration),
+				};
+			}
+
+			if (animation.duration === 0) {
+				target.scroller.scrollTop = animation.to;
 				this.scrollAnimationFrameId = 0;
-				this.lastScrollAnimationTime = 0;
 				this.scrollTarget = null;
+				this.scrollAnimation = null;
 				return;
 			}
 
-			const elapsed = this.lastScrollAnimationTime
-				? Math.min(3, (time - this.lastScrollAnimationTime) / (1000 / 60))
-				: 1;
-			this.lastScrollAnimationTime = time;
-			const easing = 1 - Math.pow(1 - 0.32, elapsed);
-			target.scroller.scrollTop += distance * easing;
+			const progress = Math.min(1, (time - animation.startedAt) / animation.duration);
+			const easing = 1 - Math.pow(1 - progress, 3);
+			target.scroller.scrollTop = animation.from + (animation.to - animation.from) * easing;
+			if (progress === 1) {
+				this.scrollAnimationFrameId = 0;
+				this.scrollTarget = null;
+				this.scrollAnimation = null;
+				return;
+			}
+
 			this.scrollAnimationFrameId = requestAnimationFrame(animate);
 		};
 
@@ -480,18 +519,18 @@ export default class TypeZen extends Plugin {
 		this.typewriterResizeObserver.observe(scroller);
 
 		const listener = EditorView.updateListener.of((update) => {
-			if (update.transactions.some((transaction) => transaction.isUserEvent("select.pointer"))) {
+			const pointerSelection = update.transactions.some((transaction) => transaction.isUserEvent("select.pointer"));
+			if (pointerSelection && !update.docChanged) {
 				this.cancelCaretMotion();
 				this.waitingForKeyboardInput = true;
-				this.smoothNextCenter = false;
 				return;
 			}
-			if (!(update.selectionSet || update.docChanged)) return;
+			if (!update.docChanged) return;
+			this.waitingForKeyboardInput = false;
+			this.cancelResizeCenter();
 			if (update.state.selection.main.from !== update.state.selection.main.to) return;
-			if (this.waitingForKeyboardInput) return;
 
-			this.centerCaret(leaf, this.smoothNextCenter ? "smooth" : "auto");
-			this.smoothNextCenter = false;
+			this.centerCaret(leaf, "smooth");
 		});
 
 		try {
@@ -517,37 +556,45 @@ export default class TypeZen extends Plugin {
 		const onPointerDown: EventListener = () => {
 			this.cancelCaretMotion();
 			this.waitingForKeyboardInput = true;
-			this.smoothNextCenter = false;
 		};
 		const onWheel: EventListener = () => {
 			this.cancelCaretMotion();
 			this.waitingForKeyboardInput = true;
-			this.smoothNextCenter = false;
-		};
-		const onKeyDown: EventListener = (event) => {
-			const key = (event as KeyboardEvent).key;
-			if (["Shift", "Control", "Alt", "Meta"].includes(key)) return;
-
-			this.cancelResizeCenter();
-			this.waitingForKeyboardInput = false;
-			this.smoothNextCenter = true;
 		};
 		view.dom.addEventListener("pointerdown", onPointerDown, true);
 		view.dom.addEventListener("wheel", onWheel, { capture: true, passive: true });
-		view.dom.addEventListener("keydown", onKeyDown, true);
-		this.typewriterPointerListeners = { editorEl: view.dom, onPointerDown, onWheel, onKeyDown };
+		this.typewriterPointerListeners = { editorEl: view.dom, onPointerDown, onWheel };
 
 		this.centerCaret(leaf);
 	}
 
 	private applyTypewriterPadding(view: EditorView, scroller: HTMLElement) {
 		const lineHeight = parseFloat(getComputedStyle(view.dom).lineHeight) || 20;
-		const padding = `${Math.max(0, scroller.clientHeight / 2 - lineHeight / 2)}px`;
-		if (scroller.style.getPropertyValue("padding-top") !== padding) {
-			scroller.style.setProperty("padding-top", padding);
+		const position = Math.min(0.8, Math.max(0.2, this.settings.caretVerticalPosition / 100));
+		const paddingTop = `${Math.max(0, scroller.clientHeight * position - lineHeight / 2)}px`;
+		const paddingBottom = `${Math.max(0, scroller.clientHeight * (1 - position) - lineHeight / 2)}px`;
+		if (scroller.style.getPropertyValue("padding-top") !== paddingTop) {
+			scroller.style.setProperty("padding-top", paddingTop);
 		}
-		if (scroller.style.getPropertyValue("padding-bottom") !== padding) {
-			scroller.style.setProperty("padding-bottom", padding);
+		if (scroller.style.getPropertyValue("padding-bottom") !== paddingBottom) {
+			scroller.style.setProperty("padding-bottom", paddingBottom);
+		}
+	}
+
+	applyCaretPositionSetting() {
+		const view = this.typewriterView;
+		const scroller = this.typewriterScroller;
+		const leaf = this.zenLeaf;
+		if (!view || !scroller || !leaf) return;
+
+		this.applyTypewriterPadding(view, scroller);
+		this.waitingForKeyboardInput = false;
+		this.centerCaret(leaf, this.settings.caretScrollDuration > 0 ? "smooth" : "auto");
+	}
+
+	applyCaretScrollDurationSetting() {
+		if (this.settings.caretScrollDuration === 0) {
+			this.cancelCaretMotion();
 		}
 	}
 
@@ -574,7 +621,6 @@ export default class TypeZen extends Plugin {
 		this.removeTypewriterPointerListeners();
 		this.cancelCaretMotion();
 		this.waitingForKeyboardInput = false;
-		this.smoothNextCenter = false;
 
 		const view = this.typewriterView;
 		this.typewriterView = null;
@@ -599,7 +645,6 @@ export default class TypeZen extends Plugin {
 
 		listeners.editorEl.removeEventListener("pointerdown", listeners.onPointerDown, true);
 		listeners.editorEl.removeEventListener("wheel", listeners.onWheel, true);
-		listeners.editorEl.removeEventListener("keydown", listeners.onKeyDown, true);
 		this.typewriterPointerListeners = null;
 	}
 
@@ -671,7 +716,15 @@ class TypeZenSettingTab extends PluginSettingTab {
 			"vignetteScaleRadial",
 		);
 
-		containerEl.createEl("h3", { text: "Animation" });
+		containerEl.createEl("h3", { text: "Writing behavior" });
+		this.addSliderSetting(
+			containerEl,
+			"Scroll duration after editing",
+			"How long the editor takes to return the caret to its writing position after typing or editing. Set to 0 for instant movement.",
+			{ min: 0, max: 800, step: 25 },
+			"caretScrollDuration",
+			() => this.plugin.applyCaretScrollDurationSetting(),
+		);
 		new Setting(containerEl)
 			.setName("Fade-in duration")
 			.setDesc("The duration (in seconds) of fade-in animation on entering Zen mode")
@@ -686,6 +739,15 @@ class TypeZenSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		this.addSliderSetting(
+			containerEl,
+			"Writing position",
+			"Choose where the caret sits vertically in the editor. Matching space above and below keeps both ends of the file reachable at that position.",
+			{ min: 20, max: 80, step: 5 },
+			"caretVerticalPosition",
+			() => this.plugin.applyCaretPositionSetting(),
+		);
 
 		containerEl.createEl("h3", { text: "Element Toggles" });
 		this.addToggleSetting(
@@ -721,9 +783,9 @@ class TypeZenSettingTab extends PluginSettingTab {
 		name: string,
 		desc: string,
 		limits: { min: number; max: number; step: number },
-		key: "vignetteOpacity" | "vignetteScaleLinear" | "vignetteScaleRadial",
+		key: "vignetteOpacity" | "vignetteScaleLinear" | "vignetteScaleRadial" | "caretScrollDuration" | "caretVerticalPosition",
+		onChange?: () => void,
 	) {
-		let valueEl: HTMLDivElement;
 		new Setting(containerEl)
 			.setName(name)
 			.setDesc(desc)
@@ -731,18 +793,12 @@ class TypeZenSettingTab extends PluginSettingTab {
 				slider
 					.setLimits(limits.min, limits.max, limits.step)
 					.setValue(this.plugin.settings[key])
-					.onChange(async (value) => {
-						valueEl.innerText = " " + value.toString();
+					.onChange((value) => {
 						this.plugin.settings[key] = value;
-						await this.plugin.saveSettings();
+						this.plugin.scheduleSliderSettingsSave();
+						onChange?.();
 					}),
-			)
-			.settingEl.createDiv("", (el: HTMLDivElement) => {
-				valueEl = el;
-				el.style.minWidth = "2.0em";
-				el.style.textAlign = "right";
-				el.innerText = " " + this.plugin.settings[key].toString();
-			});
+			);
 	}
 
 	private addToggleSetting(

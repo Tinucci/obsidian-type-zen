@@ -16,30 +16,22 @@
 	height: 0;
 }
 
-.vignette-linear {
+.typezen-fullscreen .vignette-linear {
 	background: linear-gradient(
 		90deg,
-		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 100%), transparent)
-			0%,
-		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 40%), transparent)
-			calc(var(--vignette-scale-linear) * 0.5),
-		transparent
-			var(--vignette-scale-linear),
-		transparent
-			calc(100% - var(--vignette-scale-linear)),
-		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 40%), transparent)
-			calc(100% - (var(--vignette-scale-linear) * 0.5)),
-		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 100%), transparent)
-			100%
-	);
+		rgba(0, 0, 0, var(--vignette-opacity)) 0%,
+		transparent var(--vignette-scale-linear),
+		transparent calc(100% - var(--vignette-scale-linear)),
+		rgba(0, 0, 0, var(--vignette-opacity)) 100%
+	) !important;
 }
 
-.vignette-radial {
+.typezen-fullscreen .vignette-radial {
 	background: radial-gradient(
 		circle,
 		transparent calc(100% - var(--vignette-scale-radial)),
-		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 100%), transparent) 100%
-	);
+		rgba(0, 0, 0, var(--vignette-opacity)) 100%
+	) !important;
 }
 
 .typezen-fullscreen.animate,
@@ -47,7 +39,7 @@
 	animation: typezen-fade-in var(--fadeIn-duration) ease-out both;
 }
 
-.hide {
+.typezen-fullscreen .hide {
 	display: none !important;
 }
 
