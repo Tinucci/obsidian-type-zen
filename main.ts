@@ -57,6 +57,7 @@ export default class TypeZen extends Plugin {
 
 	private zenLeaf: WorkspaceLeaf | null = null;
 	private escapeHandler: ((event: KeyboardEvent) => void) | null = null;
+	private sliderSettingsSaveTimer: number | null = null;
 	private centerRafId = 0;
 	private scrollAnimationFrameId = 0;
 	private resizeCenterTimer = 0;
@@ -94,8 +95,13 @@ export default class TypeZen extends Plugin {
 	}
 
 	onunload() {
+		const flushSliderSettings = this.sliderSettingsSaveTimer !== null;
+		this.cancelSliderSettingsSave();
 		if (this.isZenActive()) {
 			this.exitZen();
+		}
+		if (flushSliderSettings) {
+			void this.saveData(this.settings);
 		}
 	}
 
@@ -112,10 +118,29 @@ export default class TypeZen extends Plugin {
 	}
 
 	async saveSettings() {
+		this.cancelSliderSettingsSave();
 		await this.saveData(this.settings);
 		if (this.isZenActive()) {
 			this.applyZenSettings();
 		}
+	}
+
+	scheduleSliderSettingsSave() {
+		if (this.isZenActive()) {
+			this.applyZenSettings();
+		}
+		this.cancelSliderSettingsSave();
+		this.sliderSettingsSaveTimer = window.setTimeout(() => {
+			this.sliderSettingsSaveTimer = null;
+			void this.saveData(this.settings);
+		}, 300);
+	}
+
+	private cancelSliderSettingsSave() {
+		if (this.sliderSettingsSaveTimer === null) return;
+
+		window.clearTimeout(this.sliderSettingsSaveTimer);
+		this.sliderSettingsSaveTimer = null;
 	}
 
 	toggleZenMode() {
@@ -262,22 +287,8 @@ export default class TypeZen extends Plugin {
 	}
 
 	private getHostWindow(): HostWindow | null {
-		try {
-			const workspace = this.app.workspace as { getHostWindow?: () => HostWindow };
-			if (typeof workspace.getHostWindow === "function") {
-				return workspace.getHostWindow();
-			}
-
-			const electron = (window as Window & {
-				require?: (moduleName: string) => {
-					remote?: { getCurrentWindow?: () => HostWindow };
-				};
-			}).require?.("electron");
-
-			return electron?.remote?.getCurrentWindow?.() ?? null;
-		} catch {
-			return null;
-		}
+		const workspace = this.app.workspace as { getHostWindow?: () => HostWindow };
+		return workspace.getHostWindow?.() ?? null;
 	}
 
 	private setMarkdownMode(mode: "source" | "preview") {
@@ -792,9 +803,9 @@ class TypeZenSettingTab extends PluginSettingTab {
 				slider
 					.setLimits(limits.min, limits.max, limits.step)
 					.setValue(this.plugin.settings[key])
-					.onChange(async (value) => {
+					.onChange((value) => {
 						this.plugin.settings[key] = value;
-						await this.plugin.saveSettings();
+						this.plugin.scheduleSliderSettingsSave();
 						onChange?.();
 					}),
 			);
