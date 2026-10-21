@@ -1,4 +1,4 @@
-import { App, ItemView, Plugin, PluginSettingTab, Setting, WorkspaceLeaf } from "obsidian";
+import { App, ItemView, MarkdownView, Plugin, PluginSettingTab, Setting, WorkspaceLeaf } from "obsidian";
 import { EditorView } from "@codemirror/view";
 
 interface PluginSettings {
@@ -70,6 +70,29 @@ export default class TypeZen extends Plugin {
 		}
 
 		if (!isActive) {
+
+			// Switch to editing mode if the active view is a Markdown note
+		
+			const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+		
+			if (markdownView) {
+
+				const currentMode = markdownView.getMode();
+			
+				if (currentMode !== "source") {
+			
+					markdownView.setState(
+			
+						{ mode: "source" },
+			
+						{ history: false }
+			
+					);
+			
+				}
+			
+			}
+
 			// Enter simulated fullscreen
 			workspaceEl.classList.add('typezen-fullscreen');
 			this.addStyles(leaf);
@@ -86,7 +109,22 @@ export default class TypeZen extends Plugin {
 					workspaceEl.classList.remove('typezen-fullscreen');
 					workspaceEl.classList.remove('animate');
 					this.removeStyles(leaf);
-					if (win?.setFullScreen) win.setFullScreen(false);
+					if (win?.setFullScreen) win.setFullScreen(false);// Always switch to Reading mode when exiting Zen Mode.
+
+					const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+				
+					if (markdownView && markdownView.getMode() !== "preview") {
+				
+						markdownView.setState(
+				
+							{ mode: "preview" },
+				
+							{ history: false }
+				
+						);
+				
+					}
+				
 					document.removeEventListener('keydown', escapeHandler);
 				}
 			};
@@ -123,6 +161,21 @@ export default class TypeZen extends Plugin {
 			workspaceEl.classList.remove('animate');
 			this.removeStyles(leaf);
 			if (win?.setFullScreen) win.setFullScreen(false);
+			// Always switch to Reading mode when exiting Zen Mode.
+
+			const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+
+			if (markdownView && markdownView.getMode() !== "preview") {
+
+				markdownView.setState(
+
+					{ mode: "preview" },
+
+					{ history: false }
+
+				);
+
+			}
 		}
 	}
 
