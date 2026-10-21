@@ -16,7 +16,7 @@
 	height: 0;
 }
 
-.vignette-linear {
+.typezen-fullscreen .vignette-linear {
 	background: linear-gradient(
 		90deg,
 		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 100%), transparent)
@@ -31,15 +31,15 @@
 			calc(100% - (var(--vignette-scale-linear) * 0.5)),
 		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 100%), transparent)
 			100%
-	);
+	) !important;
 }
 
-.vignette-radial {
+.typezen-fullscreen .vignette-radial {
 	background: radial-gradient(
 		circle,
 		transparent calc(100% - var(--vignette-scale-radial)),
 		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 100%), transparent) 100%
-	);
+	) !important;
 }
 
 .typezen-fullscreen.animate,
@@ -71,17 +71,16 @@
 .typezen-fullscreen .workspace-leaf.active,
 .typezen-fullscreen .workspace-leaf.mod-active {
 	position: fixed !important;
-	top: 0;
-	left: 0;
-	width: 100% !important;
-	height: 100% !important;
+	inset: 0 !important;
+	width: auto !important;
+	height: auto !important;
 	z-index: 15;
 	background: var(--background-primary);
 	overflow: hidden; /* hides native scrollbars */
 }
 
 /* Hide other leaves/panes but keep editor interactive */
-.typezen-fullscreen .workspace-split > .workspace-leaf:not(.active):not(.mod-active) {
+.typezen-fullscreen .workspace-split .workspace-leaf:not(.active):not(.mod-active) {
 	display: none !important;
 }
 
