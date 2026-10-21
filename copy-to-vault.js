@@ -3,7 +3,9 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname);
 const VAULT = path.resolve(__dirname, 'test-vault');
-const PLUGIN_ID = 'my-plugin';
+const { id: PLUGIN_ID } = JSON.parse(
+  fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8')
+);
 const DEST = path.join(VAULT, '.obsidian', 'plugins', PLUGIN_ID);
 
 // ensure dest exists
