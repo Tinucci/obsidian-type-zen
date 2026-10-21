@@ -8,14 +8,18 @@ TypeZen is an Obsidian Plugin to enhance the typewriting experience.
 
 ## Development
 
-Install the locked dependencies, then start the development watcher:
+Install the locked dependencies, then build and copy the plugin to the local test vault:
 
 ```sh
 npm ci
 npm run dev
 ```
 
-The watcher rebuilds `main.js` and copies the plugin files into the local `test-vault` whenever a source file changes. Open that folder as a vault in Obsidian to try the plugin.
+Open the local `test-vault` folder as a vault in Obsidian to try the plugin. To keep rebuilding and copying after each source change, run:
+
+```sh
+npm run dev:watch
+```
 
 Create a production bundle with:
 

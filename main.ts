@@ -42,18 +42,18 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	vignetteScaleRadial: 75,
 };
 
-const CENTER_MAX_ATTEMPTS = 100;
-
 export default class TypeZen extends Plugin {
 	settings: PluginSettings;
 
 	private zenLeaf: WorkspaceLeaf | null = null;
 	private escapeHandler: ((event: KeyboardEvent) => void) | null = null;
 	private centerRafId = 0;
+	private editorObserver: MutationObserver | null = null;
 	private typewriterCompartment = new Compartment();
 	private typewriterView: EditorView | null = null;
 	private typewriterConfigured = new WeakSet<EditorView>();
 	private typewriterResizeObserver: ResizeObserver | null = null;
+	private cssVariableSnapshot: Map<string, { value: string; priority: string }> | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -78,7 +78,7 @@ export default class TypeZen extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 		if (this.isZenActive()) {
-			this.applyCssVariables();
+			this.applyZenSettings();
 		}
 	}
 
@@ -100,26 +100,21 @@ export default class TypeZen extends Plugin {
 
 	private enterZen(leaf: WorkspaceLeaf) {
 		this.setMarkdownMode("source");
-		this.applyCssVariables();
+		this.captureCssVariables();
 
 		const workspaceEl = this.app.workspace.containerEl;
 		workspaceEl.classList.add("typezen-fullscreen", "animate");
-		if (this.settings.showHeader) {
-			workspaceEl.classList.add("typezen-show-header");
-		}
-		if (!this.settings.showScroll) {
-			workspaceEl.classList.add("typezen-hide-scroll");
-		}
 
 		this.zenLeaf = leaf;
+		this.applyZenSettings();
 		this.addStyles(leaf);
 		this.setNativeFullscreen(true);
 		this.bindEscapeHandler();
-		this.startCenterLoop(leaf);
+		this.waitForEditor(leaf);
 	}
 
 	private exitZen() {
-		this.stopCenterLoop();
+		this.cancelEditorSetup();
 		this.unbindEscapeHandler();
 
 		const workspaceEl = this.app.workspace.containerEl;
@@ -137,6 +132,7 @@ export default class TypeZen extends Plugin {
 
 		this.setNativeFullscreen(false);
 		this.zenLeaf = null;
+		this.restoreCssVariables();
 
 		// Always switch to Reading mode when exiting Zen Mode.
 		this.setMarkdownMode("preview");
@@ -148,6 +144,64 @@ export default class TypeZen extends Plugin {
 		root.style.setProperty("--vignette-opacity", this.settings.vignetteOpacity.toString());
 		root.style.setProperty("--vignette-scale-linear", this.settings.vignetteScaleLinear + "%");
 		root.style.setProperty("--vignette-scale-radial", this.settings.vignetteScaleRadial + "%");
+	}
+
+	private captureCssVariables() {
+		if (this.cssVariableSnapshot) return;
+
+		const style = document.documentElement.style;
+		this.cssVariableSnapshot = new Map(
+			["--fadeIn-duration", "--vignette-opacity", "--vignette-scale-linear", "--vignette-scale-radial"]
+				.map((name) => [
+					name,
+					{ value: style.getPropertyValue(name), priority: style.getPropertyPriority(name) },
+				]),
+		);
+	}
+
+	private restoreCssVariables() {
+		if (!this.cssVariableSnapshot) return;
+
+		const style = document.documentElement.style;
+		for (const [name, { value, priority }] of this.cssVariableSnapshot) {
+			if (value) {
+				style.setProperty(name, value, priority);
+			} else {
+				style.removeProperty(name);
+			}
+		}
+		this.cssVariableSnapshot = null;
+	}
+
+	private applyZenSettings() {
+		this.applyCssVariables();
+
+		const workspaceEl = this.app.workspace.containerEl;
+		workspaceEl.classList.toggle("typezen-show-header", this.settings.showHeader);
+		workspaceEl.classList.toggle("typezen-hide-scroll", !this.settings.showScroll);
+
+		const leaf = this.zenLeaf;
+		if (!leaf) return;
+
+		const view = this.getTypeZenView(leaf);
+		const isGraph = view.getViewType() === "graph";
+		view.headerEl.classList.toggle("hide", !this.settings.showHeader);
+		view.headerEl.classList.toggle("animate", this.settings.showHeader);
+
+		if (isGraph) {
+			view.dataEngine?.controlsEl?.classList.toggle("hide", !this.settings.showGraphControls);
+		} else {
+			this.applyReadableLineWidth(view);
+		}
+	}
+
+	private applyReadableLineWidth(view: TypeZenItemView, forceReadable = this.settings.forceReadable) {
+		const vault = this.app.vault as { getConfig?: (key: string) => unknown };
+		const readableLineLength = vault.getConfig?.("readableLineLength") === true;
+		view.editMode?.editorEl?.classList.toggle(
+			"is-readable-line-width",
+			forceReadable || readableLineLength,
+		);
 	}
 
 	private bindEscapeHandler() {
@@ -205,38 +259,46 @@ export default class TypeZen extends Plugin {
 		return this.getTypeZenView(leaf).editMode?.editor?.cm;
 	}
 
-	private startCenterLoop(leaf: WorkspaceLeaf) {
-		this.stopCenterLoop();
+	private waitForEditor(leaf: WorkspaceLeaf) {
+		this.cancelEditorSetup();
+		let initialized = false;
 
-		let attempts = 0;
-		let caretMovedToEnd = false;
-
-		const centerLoop = () => {
-			if (!this.isZenActive()) return;
+		const initialize = () => {
+			if (initialized || !this.isZenActive() || this.zenLeaf !== leaf) return;
 
 			const view = this.getEditorView(leaf);
-			if (view && !caretMovedToEnd) {
-				view.dispatch({
-					selection: { anchor: view.state.doc.length },
-					scrollIntoView: false,
-				});
-				this.getTypeZenView(leaf).editMode?.editor?.focus?.();
-				caretMovedToEnd = true;
-			}
+			if (!view) return;
 
+			initialized = true;
+			this.editorObserver?.disconnect();
+			this.editorObserver = null;
+
+			view.dispatch({
+				selection: { anchor: view.state.doc.length },
+				scrollIntoView: false,
+			});
+			this.getTypeZenView(leaf).editMode?.editor?.focus?.();
+			this.applyReadableLineWidth(this.getTypeZenView(leaf));
 			this.enableTypewriter(leaf);
-			this.centerCaret(leaf);
-
-			attempts++;
-			if (attempts < CENTER_MAX_ATTEMPTS && this.isZenActive()) {
-				this.centerRafId = requestAnimationFrame(centerLoop);
-			}
+			this.centerRafId = requestAnimationFrame(() => {
+				this.centerRafId = 0;
+				this.centerCaret(leaf);
+			});
 		};
 
-		this.centerRafId = requestAnimationFrame(centerLoop);
+		initialize();
+		if (!initialized && leaf.view.getViewType() === "markdown") {
+			this.editorObserver = new MutationObserver(initialize);
+			this.editorObserver.observe(this.getTypeZenView(leaf).contentEl, {
+				childList: true,
+				subtree: true,
+			});
+		}
 	}
 
-	private stopCenterLoop() {
+	private cancelEditorSetup() {
+		this.editorObserver?.disconnect();
+		this.editorObserver = null;
 		if (this.centerRafId) {
 			cancelAnimationFrame(this.centerRafId);
 			this.centerRafId = 0;
@@ -338,27 +400,15 @@ export default class TypeZen extends Plugin {
 	private addStyles(leaf: WorkspaceLeaf) {
 		const view = this.getTypeZenView(leaf);
 		const viewEl = view.contentEl;
-		const header = view.headerEl;
 		const isGraph = view.getViewType() === "graph";
-		const graphControls = isGraph ? view.dataEngine?.controlsEl : undefined;
-
-		if (isGraph && !this.settings.showGraphControls) {
-			graphControls?.classList.add("hide");
-		}
 
 		viewEl.classList.add(isGraph ? "vignette-radial" : "vignette-linear", "animate");
 
-		if (!isGraph && this.settings.forceReadable) {
-			view.editMode?.editorEl?.classList.add("is-readable-line-width");
+		if (!isGraph) {
+			this.applyReadableLineWidth(view);
 		}
 
 		this.enableTypewriter(leaf);
-
-		if (this.settings.showHeader) {
-			header.classList.add("animate");
-		} else {
-			header.classList.add("hide");
-		}
 	}
 
 	private removeStyles(leaf: WorkspaceLeaf) {
@@ -370,10 +420,7 @@ export default class TypeZen extends Plugin {
 		if (isGraph) {
 			view.dataEngine?.controlsEl?.classList.remove("animate", "hide");
 		} else {
-			const vault = this.app.vault as { getConfig?: (key: string) => unknown };
-			if (!vault.getConfig?.("readableLineLength")) {
-				view.editMode?.editorEl?.classList.remove("is-readable-line-width");
-			}
+			this.applyReadableLineWidth(view, false);
 		}
 
 		viewEl.classList.remove("vignette-linear", "vignette-radial", "animate");
