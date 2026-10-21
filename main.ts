@@ -38,6 +38,7 @@ interface TypewriterPointerListeners {
 	onPointerDown: EventListener;
 	onWheel: EventListener;
 	onKeyDown: EventListener;
+	onBeforeInput: EventListener;
 }
 
 const DEFAULT_SETTINGS: PluginSettings = {
@@ -528,9 +529,9 @@ export default class TypeZen extends Plugin {
 			}
 			if (!(update.selectionSet || update.docChanged)) return;
 			if (update.state.selection.main.from !== update.state.selection.main.to) return;
-			if (this.waitingForKeyboardInput) return;
+			if (this.waitingForKeyboardInput || !this.smoothNextCenter) return;
 
-			this.centerCaret(leaf, this.smoothNextCenter ? "smooth" : "auto");
+			this.centerCaret(leaf, "smooth");
 			this.smoothNextCenter = false;
 		});
 
@@ -565,8 +566,16 @@ export default class TypeZen extends Plugin {
 			this.smoothNextCenter = false;
 		};
 		const onKeyDown: EventListener = (event) => {
-			const key = (event as KeyboardEvent).key;
-			if (["Shift", "Control", "Alt", "Meta"].includes(key)) return;
+			const keyboardEvent = event as KeyboardEvent;
+			if (!this.isEditingKey(keyboardEvent)) return;
+
+			this.cancelResizeCenter();
+			this.waitingForKeyboardInput = false;
+			this.smoothNextCenter = true;
+		};
+		const onBeforeInput: EventListener = (event) => {
+			const inputType = (event as InputEvent).inputType;
+			if (!inputType || !(inputType.startsWith("insert") || inputType.startsWith("delete"))) return;
 
 			this.cancelResizeCenter();
 			this.waitingForKeyboardInput = false;
@@ -575,9 +584,17 @@ export default class TypeZen extends Plugin {
 		view.dom.addEventListener("pointerdown", onPointerDown, true);
 		view.dom.addEventListener("wheel", onWheel, { capture: true, passive: true });
 		view.dom.addEventListener("keydown", onKeyDown, true);
-		this.typewriterPointerListeners = { editorEl: view.dom, onPointerDown, onWheel, onKeyDown };
+		view.dom.addEventListener("beforeinput", onBeforeInput, true);
+		this.typewriterPointerListeners = { editorEl: view.dom, onPointerDown, onWheel, onKeyDown, onBeforeInput };
 
 		this.centerCaret(leaf);
+	}
+
+	private isEditingKey(event: KeyboardEvent): boolean {
+		const key = event.key;
+		if (key === "Enter" || key === "Backspace" || key === "Delete") return true;
+		if (key.length === 1 && !event.metaKey && (!event.ctrlKey || event.getModifierState("AltGraph"))) return true;
+		return (event.metaKey || event.ctrlKey) && ["x", "v", "z", "y"].includes(key.toLowerCase());
 	}
 
 	private applyTypewriterPadding(view: EditorView, scroller: HTMLElement) {
@@ -659,6 +676,7 @@ export default class TypeZen extends Plugin {
 		listeners.editorEl.removeEventListener("pointerdown", listeners.onPointerDown, true);
 		listeners.editorEl.removeEventListener("wheel", listeners.onWheel, true);
 		listeners.editorEl.removeEventListener("keydown", listeners.onKeyDown, true);
+		listeners.editorEl.removeEventListener("beforeinput", listeners.onBeforeInput, true);
 		this.typewriterPointerListeners = null;
 	}
 
@@ -730,11 +748,11 @@ class TypeZenSettingTab extends PluginSettingTab {
 			"vignetteScaleRadial",
 		);
 
-		containerEl.createEl("h3", { text: "Animation" });
+		containerEl.createEl("h3", { text: "Writing behavior" });
 		this.addSliderSetting(
 			containerEl,
-			"Caret scroll duration",
-			"How long the caret takes to move back to its writing position after typing. Set to 0 for instant movement.",
+			"Scroll duration after editing",
+			"How long the editor takes to return the caret to its writing position after typing or editing. Set to 0 for instant movement.",
 			{ min: 0, max: 800, step: 25 },
 			"caretScrollDuration",
 			" ms",
@@ -755,10 +773,9 @@ class TypeZenSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		containerEl.createEl("h3", { text: "Typewriter" });
 		this.addSliderSetting(
 			containerEl,
-			"Caret position",
+			"Writing position",
 			"Choose where the caret sits vertically in the editor. Matching space above and below keeps both ends of the file reachable at that position.",
 			{ min: 20, max: 80, step: 5 },
 			"caretVerticalPosition",
