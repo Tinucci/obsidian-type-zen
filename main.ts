@@ -34,7 +34,7 @@ interface TypeZenItemView extends ItemView {
 interface TypewriterPointerListeners {
 	editorEl: HTMLElement;
 	onPointerDown: EventListener;
-	onPointerEnd: EventListener;
+	onKeyDown: EventListener;
 }
 
 const DEFAULT_SETTINGS: PluginSettings = {
@@ -351,12 +351,15 @@ export default class TypeZen extends Plugin {
 		});
 		this.typewriterResizeObserver.observe(scroller);
 
-		let pointerActive = false;
+		let waitingForKeyboardInput = false;
+		let smoothNextCenter = false;
 		const listener = EditorView.updateListener.of((update) => {
 			if (!(update.selectionSet || update.docChanged)) return;
-			if (update.state.selection.main.from === update.state.selection.main.to) {
-				this.centerCaret(leaf, pointerActive ? "smooth" : "auto");
-			}
+			if (update.state.selection.main.from !== update.state.selection.main.to) return;
+			if (waitingForKeyboardInput) return;
+
+			this.centerCaret(leaf, smoothNextCenter ? "smooth" : "auto");
+			smoothNextCenter = false;
 		});
 
 		try {
@@ -378,15 +381,20 @@ export default class TypeZen extends Plugin {
 		}
 
 		const onPointerDown: EventListener = () => {
-			pointerActive = true;
+			waitingForKeyboardInput = true;
+			smoothNextCenter = false;
 		};
-		const onPointerEnd: EventListener = () => {
-			pointerActive = false;
+		const onKeyDown: EventListener = (event) => {
+			const key = (event as KeyboardEvent).key;
+			if (["Shift", "Control", "Alt", "Meta"].includes(key)) return;
+			if (!waitingForKeyboardInput) return;
+
+			waitingForKeyboardInput = false;
+			smoothNextCenter = true;
 		};
 		view.dom.addEventListener("pointerdown", onPointerDown, true);
-		document.addEventListener("pointerup", onPointerEnd);
-		document.addEventListener("pointercancel", onPointerEnd);
-		this.typewriterPointerListeners = { editorEl: view.dom, onPointerDown, onPointerEnd };
+		view.dom.addEventListener("keydown", onKeyDown, true);
+		this.typewriterPointerListeners = { editorEl: view.dom, onPointerDown, onKeyDown };
 
 		this.centerCaret(leaf);
 	}
@@ -422,8 +430,7 @@ export default class TypeZen extends Plugin {
 		if (!listeners) return;
 
 		listeners.editorEl.removeEventListener("pointerdown", listeners.onPointerDown, true);
-		document.removeEventListener("pointerup", listeners.onPointerEnd);
-		document.removeEventListener("pointercancel", listeners.onPointerEnd);
+		listeners.editorEl.removeEventListener("keydown", listeners.onKeyDown, true);
 		this.typewriterPointerListeners = null;
 	}
 
