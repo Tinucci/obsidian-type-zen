@@ -4,7 +4,7 @@
 	"description": "TypeZen: a focused typewriter mode for Obsidian",
 	"main": "main.js",
 	"scripts": {
-		"dev": "node esbuild.config.mjs && node copy-to-vault.js",
+		"dev": "node esbuild.config.mjs dev",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
