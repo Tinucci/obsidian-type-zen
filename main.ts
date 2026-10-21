@@ -152,15 +152,22 @@ export default class TypeZen extends Plugin {
 	}
 
 	private isZenActive(): boolean {
-		return this.app.workspace.containerEl.classList.contains("typezen-fullscreen");
+		return this.getZenRoot().classList.contains("typezen-fullscreen");
+	}
+
+	private getZenRoot(): HTMLElement {
+		return this.app.workspace.containerEl.ownerDocument.body;
 	}
 
 	private enterZen(leaf: WorkspaceLeaf) {
 		this.setMarkdownMode("source");
 		this.captureCssVariables();
 
-		const workspaceEl = this.app.workspace.containerEl;
-		workspaceEl.classList.add("typezen-fullscreen", "animate");
+		const root = this.getZenRoot();
+		root.classList.add("typezen-fullscreen");
+		requestAnimationFrame(() => {
+			if (this.isZenActive()) root.classList.add("animate");
+		});
 
 		this.zenLeaf = leaf;
 		this.applyZenSettings();
@@ -173,8 +180,7 @@ export default class TypeZen extends Plugin {
 		this.cancelEditorSetup();
 		this.unbindEscapeHandler();
 
-		const workspaceEl = this.app.workspace.containerEl;
-		workspaceEl.classList.remove(
+		this.getZenRoot().classList.remove(
 			"typezen-fullscreen",
 			"animate",
 			"typezen-show-header",
@@ -231,9 +237,9 @@ export default class TypeZen extends Plugin {
 	private applyZenSettings() {
 		this.applyCssVariables();
 
-		const workspaceEl = this.app.workspace.containerEl;
-		workspaceEl.classList.toggle("typezen-show-header", this.settings.showHeader);
-		workspaceEl.classList.toggle("typezen-hide-scroll", !this.settings.showScroll);
+		const root = this.getZenRoot();
+		root.classList.toggle("typezen-show-header", this.settings.showHeader);
+		root.classList.toggle("typezen-hide-scroll", !this.settings.showScroll);
 
 		const leaf = this.zenLeaf;
 		if (!leaf) return;
