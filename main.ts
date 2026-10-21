@@ -357,6 +357,11 @@ export default class TypeZen extends Plugin {
 			if (!target) return;
 
 			const animationActive = this.scrollAnimationFrameId !== 0;
+			if (Math.abs(target.top - target.scroller.scrollTop) < 1) {
+				if (animationActive) this.scrollTarget = target;
+				return;
+			}
+
 			const shouldAnimate = request.behavior === "smooth" &&
 				!window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 			if (animationActive || shouldAnimate) {
@@ -492,7 +497,6 @@ export default class TypeZen extends Plugin {
 		const onKeyDown: EventListener = (event) => {
 			const key = (event as KeyboardEvent).key;
 			if (["Shift", "Control", "Alt", "Meta"].includes(key)) return;
-			if (!this.waitingForKeyboardInput) return;
 
 			this.waitingForKeyboardInput = false;
 			this.smoothNextCenter = true;
