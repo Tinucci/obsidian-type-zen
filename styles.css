@@ -1,9 +1,8 @@
 :root {
-	--vignette-opacity: 1;
-	--fadeIn-duration: 2s;
-	--vignette-scale-linear: 30%;
-	--vignette-scale-radial: 50%;
-	--vignette-exponent: 2;       /* exponent for falloff */
+	--vignette-opacity: 0.14;
+	--fadeIn-duration: 0.25s;
+	--vignette-scale-linear: 20%;
+	--vignette-scale-radial: 45%;
 }
 
 .typezen-hide-scroll .cm-scroller {
@@ -21,43 +20,17 @@
 .vignette-linear {
 	background: linear-gradient(
 		90deg,
-		/* --- LEFT SIDE (Fade Out) --- */
-		rgba(0, 0, 0, var(--vignette-opacity))
+		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 100%), transparent)
 			0%,
-
-		rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.8, var(--vignette-exponent))))
-			calc(var(--vignette-scale-linear) * 0.2),
-
-		rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.6, var(--vignette-exponent))))
-			calc(var(--vignette-scale-linear) * 0.4),
-
-		rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.4, var(--vignette-exponent))))
-			calc(var(--vignette-scale-linear) * 0.6),
-
-		rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.2, var(--vignette-exponent))))
-			calc(var(--vignette-scale-linear) * 0.8),
-
-		rgba(0, 0, 0, 0)
+		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 40%), transparent)
+			calc(var(--vignette-scale-linear) * 0.5),
+		transparent
 			var(--vignette-scale-linear),
-
-		/* --- MIDDLE (Transparent) --- */
-		rgba(0, 0, 0, 0)
+		transparent
 			calc(100% - var(--vignette-scale-linear)),
-
-		/* --- RIGHT SIDE (Fade In) --- */
-		rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.2, var(--vignette-exponent))))
-			calc(100% - (var(--vignette-scale-linear) * 0.8)),
-
-		rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.4, var(--vignette-exponent))))
-			calc(100% - (var(--vignette-scale-linear) * 0.6)),
-
-		rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.6, var(--vignette-exponent))))
-			calc(100% - (var(--vignette-scale-linear) * 0.4)),
-
-		rgba(0, 0, 0, calc(var(--vignette-opacity) * pow(0.8, var(--vignette-exponent))))
-			calc(100% - (var(--vignette-scale-linear) * 0.2)),
-
-		rgba(0, 0, 0, var(--vignette-opacity))
+		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 40%), transparent)
+			calc(100% - (var(--vignette-scale-linear) * 0.5)),
+		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 100%), transparent)
 			100%
 	);
 }
@@ -65,27 +38,33 @@
 .vignette-radial {
 	background: radial-gradient(
 		circle,
-		rgba(0, 0, 0, 0) calc(100% - var(--vignette-scale-radial)),
-		rgba(0, 0, 0, var(--vignette-opacity)) 100%
+		transparent calc(100% - var(--vignette-scale-radial)),
+		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 100%), transparent) 100%
 	);
 }
 
-.animate {
-	animation: fadeIn var(--fadeIn-duration);
+.typezen-fullscreen.animate,
+.typezen-fullscreen .animate {
+	animation: typezen-fade-in var(--fadeIn-duration) ease-out both;
 }
 
 .hide {
 	display: none !important;
 }
 
-@keyframes fadeIn {
-	0% {
+@keyframes typezen-fade-in {
+	from {
 		opacity: 0;
-		transform: scale(1.05);
 	}
-	100% {
+	to {
 		opacity: 1;
-		transform: scale(1);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.typezen-fullscreen.animate,
+	.typezen-fullscreen .animate {
+		animation: none;
 	}
 }
 
@@ -107,11 +86,8 @@
 	display: none !important;
 }
 
-/* Keep status bar visible */
 .typezen-fullscreen .status-bar {
-	position: relative !important;
-	display: flex !important;
-	z-index: 20; /* above everything */
+	display: none !important;
 }
 
 .typezen-fullscreen .workspace-ribbon {

@@ -32,14 +32,14 @@ interface TypeZenItemView extends ItemView {
 }
 
 const DEFAULT_SETTINGS: PluginSettings = {
-	animationDuration: 2,
+	animationDuration: 0.25,
 	showHeader: false,
 	showScroll: false,
 	showGraphControls: false,
 	forceReadable: true,
-	vignetteOpacity: 0.75,
+	vignetteOpacity: 0.14,
 	vignetteScaleLinear: 20,
-	vignetteScaleRadial: 75,
+	vignetteScaleRadial: 45,
 };
 
 export default class TypeZen extends Plugin {
@@ -471,7 +471,7 @@ class TypeZenSettingTab extends PluginSettingTab {
 			.setDesc("The duration (in seconds) of fade-in animation on entering Zen mode")
 			.addText((text) =>
 				text
-					.setPlaceholder("1.2")
+					.setPlaceholder("0.25")
 					.setValue(String(this.plugin.settings.animationDuration))
 					.onChange(async (value) => {
 						const parsed = Number(value);
