@@ -748,7 +748,6 @@ class TypeZenSettingTab extends PluginSettingTab {
 			"How long the editor takes to return the caret to its writing position after typing or editing. Set to 0 for instant movement.",
 			{ min: 0, max: 800, step: 25 },
 			"caretScrollDuration",
-			" ms",
 			() => this.plugin.applyCaretScrollDurationSetting(),
 		);
 		new Setting(containerEl)
@@ -772,7 +771,6 @@ class TypeZenSettingTab extends PluginSettingTab {
 			"Choose where the caret sits vertically in the editor. Matching space above and below keeps both ends of the file reachable at that position.",
 			{ min: 20, max: 80, step: 5 },
 			"caretVerticalPosition",
-			"%",
 			() => this.plugin.applyCaretPositionSetting(),
 		);
 
@@ -811,10 +809,8 @@ class TypeZenSettingTab extends PluginSettingTab {
 		desc: string,
 		limits: { min: number; max: number; step: number },
 		key: "vignetteOpacity" | "vignetteScaleLinear" | "vignetteScaleRadial" | "caretScrollDuration" | "caretVerticalPosition",
-		suffix = "",
 		onChange?: () => void,
 	) {
-		let valueEl: HTMLDivElement;
 		new Setting(containerEl)
 			.setName(name)
 			.setDesc(desc)
@@ -823,18 +819,11 @@ class TypeZenSettingTab extends PluginSettingTab {
 					.setLimits(limits.min, limits.max, limits.step)
 					.setValue(this.plugin.settings[key])
 					.onChange(async (value) => {
-						valueEl.innerText = ` ${value}${suffix}`;
 						this.plugin.settings[key] = value;
 						await this.plugin.saveSettings();
 						onChange?.();
 					}),
-			)
-			.settingEl.createDiv("", (el: HTMLDivElement) => {
-				valueEl = el;
-				el.style.minWidth = "2.0em";
-				el.style.textAlign = "right";
-				el.innerText = ` ${this.plugin.settings[key]}${suffix}`;
-			});
+			);
 	}
 
 	private addToggleSetting(
