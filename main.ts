@@ -37,8 +37,6 @@ interface TypewriterPointerListeners {
 	editorEl: HTMLElement;
 	onPointerDown: EventListener;
 	onWheel: EventListener;
-	onKeyDown: EventListener;
-	onBeforeInput: EventListener;
 }
 
 const DEFAULT_SETTINGS: PluginSettings = {
@@ -527,8 +525,9 @@ export default class TypeZen extends Plugin {
 				return;
 			}
 			if (!update.docChanged) return;
+			this.waitingForKeyboardInput = false;
+			this.cancelResizeCenter();
 			if (update.state.selection.main.from !== update.state.selection.main.to) return;
-			if (this.waitingForKeyboardInput) return;
 
 			this.centerCaret(leaf, "smooth");
 		});
@@ -561,34 +560,11 @@ export default class TypeZen extends Plugin {
 			this.cancelCaretMotion();
 			this.waitingForKeyboardInput = true;
 		};
-		const onKeyDown: EventListener = (event) => {
-			const keyboardEvent = event as KeyboardEvent;
-			if (!this.isEditingKey(keyboardEvent)) return;
-
-			this.cancelResizeCenter();
-			this.waitingForKeyboardInput = false;
-		};
-		const onBeforeInput: EventListener = (event) => {
-			const inputType = (event as InputEvent).inputType;
-			if (!inputType || !(inputType.startsWith("insert") || inputType.startsWith("delete"))) return;
-
-			this.cancelResizeCenter();
-			this.waitingForKeyboardInput = false;
-		};
 		view.dom.addEventListener("pointerdown", onPointerDown, true);
 		view.dom.addEventListener("wheel", onWheel, { capture: true, passive: true });
-		view.dom.addEventListener("keydown", onKeyDown, true);
-		view.dom.addEventListener("beforeinput", onBeforeInput, true);
-		this.typewriterPointerListeners = { editorEl: view.dom, onPointerDown, onWheel, onKeyDown, onBeforeInput };
+		this.typewriterPointerListeners = { editorEl: view.dom, onPointerDown, onWheel };
 
 		this.centerCaret(leaf);
-	}
-
-	private isEditingKey(event: KeyboardEvent): boolean {
-		const key = event.key;
-		if (key === "Enter" || key === "Backspace" || key === "Delete") return true;
-		if (key.length === 1 && !event.metaKey && (!event.ctrlKey || event.getModifierState("AltGraph"))) return true;
-		return (event.metaKey || event.ctrlKey) && ["x", "v", "z", "y"].includes(key.toLowerCase());
 	}
 
 	private applyTypewriterPadding(view: EditorView, scroller: HTMLElement) {
@@ -668,8 +644,6 @@ export default class TypeZen extends Plugin {
 
 		listeners.editorEl.removeEventListener("pointerdown", listeners.onPointerDown, true);
 		listeners.editorEl.removeEventListener("wheel", listeners.onWheel, true);
-		listeners.editorEl.removeEventListener("keydown", listeners.onKeyDown, true);
-		listeners.editorEl.removeEventListener("beforeinput", listeners.onBeforeInput, true);
 		this.typewriterPointerListeners = null;
 	}
 
