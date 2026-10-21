@@ -16,7 +16,16 @@
 	height: 0;
 }
 
-.typezen-fullscreen .vignette-linear {
+.typezen-fullscreen.vignette-linear::after,
+.typezen-fullscreen.vignette-radial::after {
+	content: "";
+	position: fixed;
+	inset: 0;
+	z-index: 16;
+	pointer-events: none;
+}
+
+.typezen-fullscreen.vignette-linear::after {
 	background: linear-gradient(
 		90deg,
 		color-mix(in srgb, var(--background-primary) calc(var(--vignette-opacity) * 100%), transparent)
@@ -34,7 +43,7 @@
 	) !important;
 }
 
-.typezen-fullscreen .vignette-radial {
+.typezen-fullscreen.vignette-radial::after {
 	background: radial-gradient(
 		circle,
 		transparent calc(100% - var(--vignette-scale-radial)),
