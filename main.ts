@@ -34,6 +34,7 @@ interface TypeZenItemView extends ItemView {
 interface TypewriterPointerListeners {
 	editorEl: HTMLElement;
 	onPointerDown: EventListener;
+	onWheel: EventListener;
 	onKeyDown: EventListener;
 }
 
@@ -55,6 +56,7 @@ export default class TypeZen extends Plugin {
 	private escapeHandler: ((event: KeyboardEvent) => void) | null = null;
 	private centerRafId = 0;
 	private scrollAnimationFrameId = 0;
+	private resizeCenterTimer = 0;
 	private pendingCenter: { leaf: WorkspaceLeaf; behavior: ScrollBehavior } | null = null;
 	private scrollTarget: { scroller: HTMLElement; top: number } | null = null;
 	private editorObserver: MutationObserver | null = null;
@@ -318,6 +320,7 @@ export default class TypeZen extends Plugin {
 	}
 
 	private cancelCaretMotion() {
+		this.cancelResizeCenter();
 		this.pendingCenter = null;
 		if (this.centerRafId) {
 			cancelAnimationFrame(this.centerRafId);
@@ -329,6 +332,22 @@ export default class TypeZen extends Plugin {
 		}
 		this.lastScrollAnimationTime = 0;
 		this.scrollTarget = null;
+	}
+
+	private cancelResizeCenter() {
+		if (!this.resizeCenterTimer) return;
+
+		window.clearTimeout(this.resizeCenterTimer);
+		this.resizeCenterTimer = 0;
+	}
+
+	private scheduleResizeCenter(leaf: WorkspaceLeaf) {
+		if (this.waitingForKeyboardInput) return;
+		this.cancelResizeCenter();
+		this.resizeCenterTimer = window.setTimeout(() => {
+			this.resizeCenterTimer = 0;
+			this.centerCaret(leaf);
+		}, 180);
 	}
 
 	private centerCaret(leaf: WorkspaceLeaf, behavior: ScrollBehavior = "auto") {
@@ -456,7 +475,7 @@ export default class TypeZen extends Plugin {
 
 		this.typewriterResizeObserver = new ResizeObserver(() => {
 			this.applyTypewriterPadding(view, scroller);
-			this.centerCaret(leaf);
+			this.scheduleResizeCenter(leaf);
 		});
 		this.typewriterResizeObserver.observe(scroller);
 
@@ -494,16 +513,23 @@ export default class TypeZen extends Plugin {
 			this.waitingForKeyboardInput = true;
 			this.smoothNextCenter = false;
 		};
+		const onWheel: EventListener = () => {
+			this.cancelCaretMotion();
+			this.waitingForKeyboardInput = true;
+			this.smoothNextCenter = false;
+		};
 		const onKeyDown: EventListener = (event) => {
 			const key = (event as KeyboardEvent).key;
 			if (["Shift", "Control", "Alt", "Meta"].includes(key)) return;
 
+			this.cancelResizeCenter();
 			this.waitingForKeyboardInput = false;
 			this.smoothNextCenter = true;
 		};
 		view.dom.addEventListener("pointerdown", onPointerDown, true);
+		view.dom.addEventListener("wheel", onWheel, { capture: true, passive: true });
 		view.dom.addEventListener("keydown", onKeyDown, true);
-		this.typewriterPointerListeners = { editorEl: view.dom, onPointerDown, onKeyDown };
+		this.typewriterPointerListeners = { editorEl: view.dom, onPointerDown, onWheel, onKeyDown };
 
 		this.centerCaret(leaf);
 	}
@@ -566,6 +592,7 @@ export default class TypeZen extends Plugin {
 		if (!listeners) return;
 
 		listeners.editorEl.removeEventListener("pointerdown", listeners.onPointerDown, true);
+		listeners.editorEl.removeEventListener("wheel", listeners.onWheel, true);
 		listeners.editorEl.removeEventListener("keydown", listeners.onKeyDown, true);
 		this.typewriterPointerListeners = null;
 	}
