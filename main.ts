@@ -650,10 +650,10 @@ export default class TypeZen extends Plugin {
 
 	private addStyles(leaf: WorkspaceLeaf) {
 		const view = this.getTypeZenView(leaf);
-		const root = this.getZenRoot();
+		const viewEl = view.contentEl;
 		const isGraph = view.getViewType() === "graph";
 
-		root.classList.add(isGraph ? "vignette-radial" : "vignette-linear");
+		viewEl.classList.add(isGraph ? "vignette-radial" : "vignette-linear");
 
 		if (!isGraph) {
 			this.applyReadableLineWidth(view);
@@ -664,7 +664,7 @@ export default class TypeZen extends Plugin {
 
 	private removeStyles(leaf: WorkspaceLeaf) {
 		const view = this.getTypeZenView(leaf);
-		const root = this.getZenRoot();
+		const viewEl = view.contentEl;
 		const header = view.headerEl;
 		const isGraph = view.getViewType() === "graph";
 
@@ -674,7 +674,7 @@ export default class TypeZen extends Plugin {
 			this.applyReadableLineWidth(view, false);
 		}
 
-		root.classList.remove("vignette-linear", "vignette-radial");
+		viewEl.classList.remove("vignette-linear", "vignette-radial");
 		header.classList.remove("animate", "hide");
 
 		this.disableTypewriter();
