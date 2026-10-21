@@ -105,6 +105,10 @@
 	display: none !important;
 }
 
+.typezen-fullscreen .workspace-tab-header-container {
+	display: none !important;
+}
+
 .typezen-fullscreen .status-bar {
 	display: none !important;
 }
