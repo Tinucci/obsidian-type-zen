@@ -64,6 +64,8 @@ export default class TypeZen extends Plugin {
 	private typewriterConfigured = new WeakSet<EditorView>();
 	private typewriterResizeObserver: ResizeObserver | null = null;
 	private typewriterPointerListeners: TypewriterPointerListeners | null = null;
+	private waitingForKeyboardInput = false;
+	private smoothNextCenter = false;
 	private cssVariableSnapshot: Map<string, { value: string; priority: string }> | null = null;
 
 	async onload() {
@@ -324,6 +326,8 @@ export default class TypeZen extends Plugin {
 	}
 
 	private centerCaret(leaf: WorkspaceLeaf, behavior: ScrollBehavior = "auto") {
+		if (this.waitingForKeyboardInput) return;
+
 		const preserveSmoothRequest = this.pendingCenter?.leaf === leaf &&
 			this.pendingCenter.behavior === "smooth";
 		this.pendingCenter = {
@@ -334,6 +338,11 @@ export default class TypeZen extends Plugin {
 
 		this.centerRafId = requestAnimationFrame(() => {
 			this.centerRafId = 0;
+			if (this.waitingForKeyboardInput) {
+				this.pendingCenter = null;
+				return;
+			}
+
 			const request = this.pendingCenter;
 			this.pendingCenter = null;
 			if (!request) return;
@@ -423,15 +432,13 @@ export default class TypeZen extends Plugin {
 		});
 		this.typewriterResizeObserver.observe(scroller);
 
-		let waitingForKeyboardInput = false;
-		let smoothNextCenter = false;
 		const listener = EditorView.updateListener.of((update) => {
 			if (!(update.selectionSet || update.docChanged)) return;
 			if (update.state.selection.main.from !== update.state.selection.main.to) return;
-			if (waitingForKeyboardInput) return;
+			if (this.waitingForKeyboardInput) return;
 
-			this.centerCaret(leaf, smoothNextCenter ? "smooth" : "auto");
-			smoothNextCenter = false;
+			this.centerCaret(leaf, this.smoothNextCenter ? "smooth" : "auto");
+			this.smoothNextCenter = false;
 		});
 
 		try {
@@ -454,16 +461,16 @@ export default class TypeZen extends Plugin {
 
 		const onPointerDown: EventListener = () => {
 			this.cancelCaretMotion();
-			waitingForKeyboardInput = true;
-			smoothNextCenter = false;
+			this.waitingForKeyboardInput = true;
+			this.smoothNextCenter = false;
 		};
 		const onKeyDown: EventListener = (event) => {
 			const key = (event as KeyboardEvent).key;
 			if (["Shift", "Control", "Alt", "Meta"].includes(key)) return;
-			if (!waitingForKeyboardInput) return;
+			if (!this.waitingForKeyboardInput) return;
 
-			waitingForKeyboardInput = false;
-			smoothNextCenter = true;
+			this.waitingForKeyboardInput = false;
+			this.smoothNextCenter = true;
 		};
 		view.dom.addEventListener("pointerdown", onPointerDown, true);
 		view.dom.addEventListener("keydown", onKeyDown, true);
@@ -482,6 +489,8 @@ export default class TypeZen extends Plugin {
 		this.typewriterResizeObserver = null;
 		this.removeTypewriterPointerListeners();
 		this.cancelCaretMotion();
+		this.waitingForKeyboardInput = false;
+		this.smoothNextCenter = false;
 
 		const view = this.typewriterView;
 		this.typewriterView = null;
