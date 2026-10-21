@@ -156,7 +156,7 @@ export default class TypeZen extends Plugin {
 	}
 
 	private getZenRoot(): HTMLElement {
-		return this.app.workspace.containerEl.ownerDocument.body;
+		return this.app.workspace.containerEl;
 	}
 
 	private enterZen(leaf: WorkspaceLeaf) {
@@ -653,7 +653,7 @@ export default class TypeZen extends Plugin {
 		const viewEl = view.contentEl;
 		const isGraph = view.getViewType() === "graph";
 
-		viewEl.classList.add(isGraph ? "vignette-radial" : "vignette-linear");
+		viewEl.classList.add(isGraph ? "vignette-radial" : "vignette-linear", "animate");
 
 		if (!isGraph) {
 			this.applyReadableLineWidth(view);
@@ -674,7 +674,7 @@ export default class TypeZen extends Plugin {
 			this.applyReadableLineWidth(view, false);
 		}
 
-		viewEl.classList.remove("vignette-linear", "vignette-radial");
+		viewEl.classList.remove("vignette-linear", "vignette-radial", "animate");
 		header.classList.remove("animate", "hide");
 
 		this.disableTypewriter();
