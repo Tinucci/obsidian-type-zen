@@ -8,7 +8,6 @@
 .typezen-hide-scroll .cm-scroller {
 	scrollbar-width: none;
 	padding-right: 0 !important;
-	padding-bottom: 0 !important;
 }
 
 .typezen-hide-scroll .cm-scroller::-webkit-scrollbar {

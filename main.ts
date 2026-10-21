@@ -64,8 +64,13 @@ export default class TypeZen extends Plugin {
 	private typewriterConfigured = new WeakSet<EditorView>();
 	private typewriterResizeObserver: ResizeObserver | null = null;
 	private typewriterPointerListeners: TypewriterPointerListeners | null = null;
+	private typewriterPaddingSnapshot: {
+		paddingTop: { value: string; priority: string };
+		paddingBottom: { value: string; priority: string };
+	} | null = null;
 	private waitingForKeyboardInput = false;
 	private smoothNextCenter = false;
+	private lastScrollAnimationTime = 0;
 	private cssVariableSnapshot: Map<string, { value: string; priority: string }> | null = null;
 
 	async onload() {
@@ -322,6 +327,7 @@ export default class TypeZen extends Plugin {
 			cancelAnimationFrame(this.scrollAnimationFrameId);
 			this.scrollAnimationFrameId = 0;
 		}
+		this.lastScrollAnimationTime = 0;
 		this.scrollTarget = null;
 	}
 
@@ -391,10 +397,11 @@ export default class TypeZen extends Plugin {
 	private animateCaretScroll() {
 		if (this.scrollAnimationFrameId) return;
 
-		const animate = () => {
+		const animate = (time: number) => {
 			const target = this.scrollTarget;
 			if (!target || !target.scroller.isConnected) {
 				this.scrollAnimationFrameId = 0;
+				this.lastScrollAnimationTime = 0;
 				this.scrollTarget = null;
 				return;
 			}
@@ -403,11 +410,17 @@ export default class TypeZen extends Plugin {
 			if (Math.abs(distance) < 0.75) {
 				target.scroller.scrollTop = target.top;
 				this.scrollAnimationFrameId = 0;
+				this.lastScrollAnimationTime = 0;
 				this.scrollTarget = null;
 				return;
 			}
 
-			target.scroller.scrollTop += distance * 0.24;
+			const elapsed = this.lastScrollAnimationTime
+				? Math.min(3, (time - this.lastScrollAnimationTime) / (1000 / 60))
+				: 1;
+			this.lastScrollAnimationTime = time;
+			const easing = 1 - Math.pow(1 - 0.32, elapsed);
+			target.scroller.scrollTop += distance * easing;
 			this.scrollAnimationFrameId = requestAnimationFrame(animate);
 		};
 
@@ -424,6 +437,16 @@ export default class TypeZen extends Plugin {
 
 		const scroller = (view.dom.querySelector(".cm-scroller") as HTMLElement | null) ?? view.dom;
 		this.typewriterScroller = scroller;
+		this.typewriterPaddingSnapshot = {
+			paddingTop: {
+				value: scroller.style.getPropertyValue("padding-top"),
+				priority: scroller.style.getPropertyPriority("padding-top"),
+			},
+			paddingBottom: {
+				value: scroller.style.getPropertyValue("padding-bottom"),
+				priority: scroller.style.getPropertyPriority("padding-bottom"),
+			},
+		};
 		this.applyTypewriterPadding(view, scroller);
 
 		this.typewriterResizeObserver = new ResizeObserver(() => {
@@ -456,6 +479,8 @@ export default class TypeZen extends Plugin {
 			this.typewriterView = null;
 			this.typewriterResizeObserver?.disconnect();
 			this.typewriterResizeObserver = null;
+			this.restoreTypewriterPadding(scroller);
+			this.typewriterScroller = null;
 			return;
 		}
 
@@ -481,7 +506,30 @@ export default class TypeZen extends Plugin {
 
 	private applyTypewriterPadding(view: EditorView, scroller: HTMLElement) {
 		const lineHeight = parseFloat(getComputedStyle(view.dom).lineHeight) || 20;
-		scroller.style.paddingTop = `${Math.max(0, scroller.clientHeight / 2 - lineHeight / 2)}px`;
+		const padding = `${Math.max(0, scroller.clientHeight / 2 - lineHeight / 2)}px`;
+		if (scroller.style.getPropertyValue("padding-top") !== padding) {
+			scroller.style.setProperty("padding-top", padding);
+		}
+		if (scroller.style.getPropertyValue("padding-bottom") !== padding) {
+			scroller.style.setProperty("padding-bottom", padding);
+		}
+	}
+
+	private restoreTypewriterPadding(scroller: HTMLElement) {
+		const snapshot = this.typewriterPaddingSnapshot;
+		if (!snapshot) return;
+
+		for (const [property, saved] of [
+			["padding-top", snapshot.paddingTop],
+			["padding-bottom", snapshot.paddingBottom],
+		] as const) {
+			if (saved.value) {
+				scroller.style.setProperty(property, saved.value, saved.priority);
+			} else {
+				scroller.style.removeProperty(property);
+			}
+		}
+		this.typewriterPaddingSnapshot = null;
 	}
 
 	private disableTypewriter() {
@@ -506,7 +554,7 @@ export default class TypeZen extends Plugin {
 			// Editor may already be torn down.
 		}
 
-		(scroller ?? view.dom).style.paddingTop = "";
+		this.restoreTypewriterPadding(scroller ?? view.dom);
 	}
 
 	private removeTypewriterPointerListeners() {
