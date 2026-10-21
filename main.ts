@@ -480,6 +480,12 @@ export default class TypeZen extends Plugin {
 		this.typewriterResizeObserver.observe(scroller);
 
 		const listener = EditorView.updateListener.of((update) => {
+			if (update.transactions.some((transaction) => transaction.isUserEvent("select.pointer"))) {
+				this.cancelCaretMotion();
+				this.waitingForKeyboardInput = true;
+				this.smoothNextCenter = false;
+				return;
+			}
 			if (!(update.selectionSet || update.docChanged)) return;
 			if (update.state.selection.main.from !== update.state.selection.main.to) return;
 			if (this.waitingForKeyboardInput) return;
