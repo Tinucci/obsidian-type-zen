@@ -15,11 +15,7 @@ npm ci
 npm run dev
 ```
 
-Open the local `test-vault` folder as a vault in Obsidian to try the plugin. To keep rebuilding and copying after each source change, run:
-
-```sh
-npm run dev:watch
-```
+Open the local `test-vault` folder as a vault in Obsidian to try the plugin.
 
 Create a production bundle with:
 

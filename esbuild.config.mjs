@@ -1,6 +1,5 @@
 import esbuild from "esbuild";
 import process from "process";
-import { execFileSync } from "node:child_process";
 import builtins from "builtin-modules";
 
 const banner =
@@ -11,9 +10,8 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const production = process.argv[2] === "production";
-const watch = process.argv[2] === "dev";
 
-const options = {
+esbuild.build({
 	banner: {
 		js: banner,
 	},
@@ -40,22 +38,4 @@ const options = {
 	sourcemap: production ? false : 'inline',
 	treeShaking: true,
 	outfile: 'main.js',
-};
-
-if (watch) {
-	options.plugins = [{
-		name: "copy-to-vault",
-		setup(build) {
-			build.onEnd((result) => {
-				if (result.errors.length === 0) {
-					execFileSync(process.execPath, ["copy-to-vault.js"], { stdio: "inherit" });
-				}
-			});
-		},
-	}];
-
-	const context = await esbuild.context(options);
-	await context.watch();
-} else {
-	await esbuild.build(options);
-}
+}).catch(() => process.exit(1));
