@@ -1,15 +1,34 @@
 import { App, ItemView, MarkdownView, Plugin, PluginSettingTab, Setting, WorkspaceLeaf } from "obsidian";
+import { Compartment, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 interface PluginSettings {
-	animationDuration: number,
-	showHeader: boolean,
-	showScroll: boolean,
-	showGraphControls: boolean,
-	forceReadable: boolean,
-	vignetteOpacity: number,
-	vignetteScaleLinear: number,
-	vignetteScaleRadial: number
+	animationDuration: number;
+	showHeader: boolean;
+	showScroll: boolean;
+	showGraphControls: boolean;
+	forceReadable: boolean;
+	vignetteOpacity: number;
+	vignetteScaleLinear: number;
+	vignetteScaleRadial: number;
+}
+
+interface HostWindow {
+	setFullScreen?: (fullscreen: boolean) => void;
+}
+
+interface TypeZenItemView extends ItemView {
+	headerEl: HTMLElement;
+	editMode?: {
+		editor?: {
+			cm?: EditorView;
+			focus?: () => void;
+		};
+		editorEl?: HTMLElement;
+	};
+	dataEngine?: {
+		controlsEl?: HTMLElement;
+	};
 }
 
 const DEFAULT_SETTINGS: PluginSettings = {
@@ -17,26 +36,40 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	showHeader: false,
 	showScroll: false,
 	showGraphControls: false,
-	forceReadable: true, 
+	forceReadable: true,
 	vignetteOpacity: 0.75,
 	vignetteScaleLinear: 20,
-	vignetteScaleRadial: 75
-}
+	vignetteScaleRadial: 75,
+};
+
+const CENTER_MAX_ATTEMPTS = 100;
 
 export default class TypeZen extends Plugin {
 	settings: PluginSettings;
+
+	private zenLeaf: WorkspaceLeaf | null = null;
+	private escapeHandler: ((event: KeyboardEvent) => void) | null = null;
+	private centerRafId = 0;
+	private typewriterCompartment = new Compartment();
+	private typewriterView: EditorView | null = null;
+	private typewriterConfigured = new WeakSet<EditorView>();
+	private typewriterResizeObserver: ResizeObserver | null = null;
 
 	async onload() {
 		await this.loadSettings();
 		this.addCommand({
 			id: "zenmode",
 			name: "Zen mode",
-			callback: this.fullscreenMode.bind(this),
+			callback: () => this.toggleZenMode(),
 		});
 		this.addSettingTab(new TypeZenSettingTab(this.app, this));
 	}
 
-	onunload() {}
+	onunload() {
+		if (this.isZenActive()) {
+			this.exitZen();
+		}
+	}
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -44,328 +77,311 @@ export default class TypeZen extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+		if (this.isZenActive()) {
+			this.applyCssVariables();
+		}
 	}
 
-	fullscreenMode() {
-		// Get the active leaf
+	toggleZenMode() {
+		if (this.isZenActive()) {
+			this.exitZen();
+			return;
+		}
+
 		const leaf = this.app.workspace.getActiveViewOfType(ItemView)?.leaf;
 		if (!leaf || leaf.view.getViewType() === "empty") return;
 
-		// Update root CSS variables for vignette and animation
-		const root = document.documentElement;
-		root.style.setProperty('--fadeIn-duration', this.settings.animationDuration + 's');
-		root.style.setProperty('--vignette-opacity', this.settings.vignetteOpacity.toString());
-		root.style.setProperty('--vignette-scale-linear', this.settings.vignetteScaleLinear + '%');
-		root.style.setProperty('--vignette-scale-radial', this.settings.vignetteScaleRadial + '%');
+		this.enterZen(leaf);
+	}
+
+	private isZenActive(): boolean {
+		return this.app.workspace.containerEl.classList.contains("typezen-fullscreen");
+	}
+
+	private enterZen(leaf: WorkspaceLeaf) {
+		this.setMarkdownMode("source");
+		this.applyCssVariables();
 
 		const workspaceEl = this.app.workspace.containerEl;
-		const isActive = workspaceEl.classList.contains('typezen-fullscreen');
-
-		// Get Electron window safely
-		let win: any = null;
-		try {
-			win = (this.app as any).workspace.getHostWindow?.() || (window as any).require?.('electron')?.remote?.getCurrentWindow?.();
-		} catch (e) {
-			win = null;
+		workspaceEl.classList.add("typezen-fullscreen", "animate");
+		if (this.settings.showHeader) {
+			workspaceEl.classList.add("typezen-show-header");
+		}
+		if (!this.settings.showScroll) {
+			workspaceEl.classList.add("typezen-hide-scroll");
 		}
 
-		if (!isActive) {
+		this.zenLeaf = leaf;
+		this.addStyles(leaf);
+		this.setNativeFullscreen(true);
+		this.bindEscapeHandler();
+		this.startCenterLoop(leaf);
+	}
 
-			// Switch to editing mode if the active view is a Markdown note
-		
-			const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-		
-			if (markdownView) {
+	private exitZen() {
+		this.stopCenterLoop();
+		this.unbindEscapeHandler();
 
-				const currentMode = markdownView.getMode();
-			
-				if (currentMode !== "source") {
-			
-					markdownView.setState(
-			
-						{ mode: "source" },
-			
-						{ history: false }
-			
-					);
-			
-				}
-			
-			}
+		const workspaceEl = this.app.workspace.containerEl;
+		workspaceEl.classList.remove(
+			"typezen-fullscreen",
+			"animate",
+			"typezen-show-header",
+			"typezen-hide-scroll",
+		);
 
-			// Enter simulated fullscreen
-			workspaceEl.classList.add('typezen-fullscreen');
-			this.addStyles(leaf);
-
-			// Enter native fullscreen if window object available
-			if (win?.setFullScreen) win.setFullScreen(true);
-
-			// Add animation class to workspace for fade-in
-			workspaceEl.classList.add('animate');
-
-			// Escape key listener to exit
-			const escapeHandler = (e: KeyboardEvent) => {
-				if (e.key === 'Escape') {
-					workspaceEl.classList.remove('typezen-fullscreen');
-					workspaceEl.classList.remove('animate');
-					this.removeStyles(leaf);
-					if (win?.setFullScreen) win.setFullScreen(false);// Always switch to Reading mode when exiting Zen Mode.
-
-					const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				
-					if (markdownView && markdownView.getMode() !== "preview") {
-				
-						markdownView.setState(
-				
-							{ mode: "preview" },
-				
-							{ history: false }
-				
-						);
-				
-					}
-				
-					document.removeEventListener('keydown', escapeHandler);
-				}
-			};
-			document.addEventListener('keydown', escapeHandler);
-
-			const editor = leaf.view.editMode.editor;
-			if (editor) editor.focus();
-
-			const view: EditorView = (editor as any).cm;
-			if (!view) return;
-
-			view.dispatch({
-				selection: { anchor: view.state.doc.length},
-				scrollIntoView: false
-			});
-
-			// TODO(): Urgently change this with something better.
-			// Although it seems like at whatever point the function is called, it is still early
-			let attempts = 0;
-			const maxAttempts = 100;
-
-			const centerLoop = () => {
-				this.centerCaret(leaf);
-				attempts++;
-				// If not at desired scroll or still within max attempts, try next frame
-				if (attempts < maxAttempts) requestAnimationFrame(centerLoop);
-			};
-
-			requestAnimationFrame(centerLoop);
-
-		} else {
-			// Exit fullscreen
-			workspaceEl.classList.remove('typezen-fullscreen');
-			workspaceEl.classList.remove('animate');
+		const leaf = this.zenLeaf ?? this.app.workspace.getActiveViewOfType(ItemView)?.leaf;
+		if (leaf) {
 			this.removeStyles(leaf);
-			if (win?.setFullScreen) win.setFullScreen(false);
-			// Always switch to Reading mode when exiting Zen Mode.
+		}
 
-			const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+		this.setNativeFullscreen(false);
+		this.zenLeaf = null;
 
-			if (markdownView && markdownView.getMode() !== "preview") {
+		// Always switch to Reading mode when exiting Zen Mode.
+		this.setMarkdownMode("preview");
+	}
 
-				markdownView.setState(
+	private applyCssVariables() {
+		const root = document.documentElement;
+		root.style.setProperty("--fadeIn-duration", this.settings.animationDuration + "s");
+		root.style.setProperty("--vignette-opacity", this.settings.vignetteOpacity.toString());
+		root.style.setProperty("--vignette-scale-linear", this.settings.vignetteScaleLinear + "%");
+		root.style.setProperty("--vignette-scale-radial", this.settings.vignetteScaleRadial + "%");
+	}
 
-					{ mode: "preview" },
-
-					{ history: false }
-
-				);
-
+	private bindEscapeHandler() {
+		this.unbindEscapeHandler();
+		this.escapeHandler = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				this.exitZen();
 			}
+		};
+		document.addEventListener("keydown", this.escapeHandler);
+	}
+
+	private unbindEscapeHandler() {
+		if (!this.escapeHandler) return;
+		document.removeEventListener("keydown", this.escapeHandler);
+		this.escapeHandler = null;
+	}
+
+	private setNativeFullscreen(fullscreen: boolean) {
+		const win = this.getHostWindow();
+		win?.setFullScreen?.(fullscreen);
+	}
+
+	private getHostWindow(): HostWindow | null {
+		try {
+			const workspace = this.app.workspace as { getHostWindow?: () => HostWindow };
+			if (typeof workspace.getHostWindow === "function") {
+				return workspace.getHostWindow();
+			}
+
+			const electron = (window as Window & {
+				require?: (moduleName: string) => {
+					remote?: { getCurrentWindow?: () => HostWindow };
+				};
+			}).require?.("electron");
+
+			return electron?.remote?.getCurrentWindow?.() ?? null;
+		} catch {
+			return null;
 		}
 	}
 
-	private applyNoScroll(leaf: WorkspaceLeaf) {
-		const viewEl = leaf.view.contentEl;
-		const scroller = viewEl.querySelector('.cm-scroller') as HTMLElement;
-		if (!scroller) return;
+	private setMarkdownMode(mode: "source" | "preview") {
+		const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (markdownView && markdownView.getMode() !== mode) {
+			markdownView.setState({ mode }, { history: false });
+		}
+	}
 
-		// Avoid double-wrapping
-		if (scroller.parentElement?.classList.contains('cm-scroller-wrapper')) return;
+	private getTypeZenView(leaf: WorkspaceLeaf): TypeZenItemView {
+		return leaf.view as TypeZenItemView;
+	}
 
-		const wrapper = document.createElement('div');
-		wrapper.classList.add('cm-scroller-wrapper');
+	private getEditorView(leaf: WorkspaceLeaf): EditorView | undefined {
+		return this.getTypeZenView(leaf).editMode?.editor?.cm;
+	}
 
-		scroller.parentElement?.insertBefore(wrapper, scroller);
-		wrapper.appendChild(scroller);
+	private startCenterLoop(leaf: WorkspaceLeaf) {
+		this.stopCenterLoop();
 
-		scroller.classList.add('noscroll-native');
+		let attempts = 0;
+		let caretMovedToEnd = false;
 
-		const wheelHandler = (ev: WheelEvent) => {
-			scroller.scrollTop += ev.deltaY;
-			scroller.scrollLeft += ev.deltaX;
-			ev.preventDefault();
+		const centerLoop = () => {
+			if (!this.isZenActive()) return;
+
+			const view = this.getEditorView(leaf);
+			if (view && !caretMovedToEnd) {
+				view.dispatch({
+					selection: { anchor: view.state.doc.length },
+					scrollIntoView: false,
+				});
+				this.getTypeZenView(leaf).editMode?.editor?.focus?.();
+				caretMovedToEnd = true;
+			}
+
+			this.enableTypewriter(leaf);
+			this.centerCaret(leaf);
+
+			attempts++;
+			if (attempts < CENTER_MAX_ATTEMPTS && this.isZenActive()) {
+				this.centerRafId = requestAnimationFrame(centerLoop);
+			}
 		};
 
-		wrapper.addEventListener('wheel', wheelHandler, { passive: false });
-
-		(scroller as any)._wrapper = wrapper;
-		(scroller as any)._wheelHandler = wheelHandler;
+		this.centerRafId = requestAnimationFrame(centerLoop);
 	}
 
-	private removeNoScroll(leaf: WorkspaceLeaf) {
-		const viewEl = leaf.view.contentEl;
-		const scroller = viewEl.querySelector('.cm-scroller') as HTMLElement;
-		if (!scroller) return;
-
-		const wrapper = (scroller as any)._wrapper as HTMLElement | undefined;
-		const wheelHandler = (scroller as any)._wheelHandler as EventListener | undefined;
-
-		if (wrapper && wheelHandler) {
-			wrapper.removeEventListener('wheel', wheelHandler);
-			wrapper.parentElement?.insertBefore(scroller, wrapper);
-			wrapper.remove();
+	private stopCenterLoop() {
+		if (this.centerRafId) {
+			cancelAnimationFrame(this.centerRafId);
+			this.centerRafId = 0;
 		}
-
-		scroller.classList.remove('noscroll-native');
-
-		delete (scroller as any)._wrapper;
-		delete (scroller as any)._wheelHandler;
 	}
 
-	// Helper: center caret vertically in scroller
 	private centerCaret(leaf: WorkspaceLeaf) {
 		try {
-			const cmWrapper = (leaf.view as any).editMode?.editor;
-			const view: EditorView | undefined = cmWrapper?.cm;
+			const view = this.getEditorView(leaf);
 			if (!view) return;
 
-			const scroller: HTMLElement = (view.dom.querySelector('.cm-scroller') as HTMLElement) || (view.dom as HTMLElement);
-
-			// current caret position (doc offset)
+			const scroller = (view.dom.querySelector(".cm-scroller") as HTMLElement | null) ?? view.dom;
 			const pos = view.state.selection.main.head;
-			// Get coordinates for that position (relative to viewport)
 			const coords = view.coordsAtPos(pos);
 			if (!coords) return;
 
 			const scrollerRect = scroller.getBoundingClientRect();
-
-			// Height of caret line (use coords.bottom - coords.top as best estimate)
 			const lineHeight = Math.max(1, coords.bottom - coords.top);
-
-			// Compute absolute offset to target scroll top so that caret's center is at scroller center
 			const caretTopInScroller = coords.top - scrollerRect.top + scroller.scrollTop;
-			const target = caretTopInScroller - (scroller.clientHeight / 2) + (lineHeight / 2);
+			const target = caretTopInScroller - scroller.clientHeight / 2 + lineHeight / 2;
 
-			// Avoid NaN or small differences being forced repeatedly
 			if (!Number.isFinite(target)) return;
-
-			// Apply without smooth behavior to avoid visual jump issues
-			scroller.scrollTo({ top: target, behavior: 'auto' });
-		} catch (e) {
-			// Best-effort only. Silence any unexpected runtime errors.
-			// (Do not throw — we must remain non-destructive to existing behavior.)
+			scroller.scrollTo({ top: target, behavior: "auto" });
+		} catch {
+			// Best-effort only; never throw from a scroll helper.
 		}
-	};
+	}
 
 	private enableTypewriter(leaf: WorkspaceLeaf) {
-		// Defensive lookups for current editor/view
-		const cmWrapper = (leaf.view as any).editMode?.editor;
-		const view: EditorView | undefined = cmWrapper?.cm;
-		if (!view) return;
+		if (!this.isZenActive()) return;
+		const view = this.getEditorView(leaf);
+		if (!view || this.typewriterView === view) return;
 
-		// Avoid double registration
-		if ((view as any)._typewriterActive) return;
-		(view as any)._typewriterActive = true;
+		this.disableTypewriter();
+		this.typewriterView = view;
 
-		// Find the visible scroller element (fallback to view.dom)
-		const scroller: HTMLElement = (view.dom.querySelector('.cm-scroller') as HTMLElement) || (view.dom as HTMLElement);
+		const scroller = (view.dom.querySelector(".cm-scroller") as HTMLElement | null) ?? view.dom;
+		this.applyTypewriterPadding(view, scroller);
 
-		const lineHeight = parseFloat(getComputedStyle(view.dom).lineHeight) || 20; 
-		if (!scroller.classList.contains('typewriter-top-padding')) {
-			scroller.style.paddingTop = `${scroller.clientHeight / 2 - lineHeight / 2}px`;
-			scroller.classList.add('typewriter-top-padding');
-		}
+		this.typewriterResizeObserver = new ResizeObserver(() => {
+			this.applyTypewriterPadding(view, scroller);
+			this.centerCaret(leaf);
+		});
+		this.typewriterResizeObserver.observe(scroller);
 
-		// Events that reasonably indicate selection/caret changes
-		const events = ['keydown', 'mouseup', 'pointerup', 'input'];
-
-		// Bind handlers
-		const bound = (ev: Event) => {
-			const cmWrapper = (leaf.view as any).editMode?.editor;
-			const view: EditorView | undefined = cmWrapper?.cm;
-			if (!view) return;
-
-			const selection = view.state.selection.main;
-
-			// Only center if there is no selection (caret only)
-			if (selection.from === selection.to) {
+		const listener = EditorView.updateListener.of((update) => {
+			if (!(update.selectionSet || update.docChanged)) return;
+			if (update.state.selection.main.from === update.state.selection.main.to) {
 				this.centerCaret(leaf);
 			}
-		};
+		});
 
-		for (const evName of events) view.dom.addEventListener(evName, bound, { passive: true });
+		try {
+			if (this.typewriterConfigured.has(view)) {
+				view.dispatch({
+					effects: this.typewriterCompartment.reconfigure(listener),
+				});
+			} else {
+				view.dispatch({
+					effects: StateEffect.appendConfig.of(this.typewriterCompartment.of(listener)),
+				});
+				this.typewriterConfigured.add(view);
+			}
+		} catch {
+			this.typewriterView = null;
+			this.typewriterResizeObserver?.disconnect();
+			this.typewriterResizeObserver = null;
+			return;
+		}
 
-		// Also do an initial centering right away
 		this.centerCaret(leaf);
-
-		// Store cleanup handles on view so disable is simple
-		(view as any)._typewriterCleanup = () => {
-			for (const evName of events) view.dom.removeEventListener(evName, bound);
-
-			// --- Remove top padding ---
-			scroller.style.paddingTop = '';
-			scroller.classList.remove('typewriter-top-padding');
-
-			delete (view as any)._typewriterCleanup;
-			delete (view as any)._typewriterActive;
-		};
 	}
 
-	private disableTypewriter(leaf: WorkspaceLeaf) {
-		const cmWrapper = (leaf.view as any).editMode?.editor;
-		const view: EditorView | undefined = cmWrapper?.cm;
+	private applyTypewriterPadding(view: EditorView, scroller: HTMLElement) {
+		const lineHeight = parseFloat(getComputedStyle(view.dom).lineHeight) || 20;
+		scroller.style.paddingTop = `${Math.max(0, scroller.clientHeight / 2 - lineHeight / 2)}px`;
+		scroller.classList.add("typewriter-top-padding");
+	}
+
+	private disableTypewriter() {
+		this.typewriterResizeObserver?.disconnect();
+		this.typewriterResizeObserver = null;
+
+		const view = this.typewriterView;
+		this.typewriterView = null;
 		if (!view) return;
 
-		const cleanup = (view as any)._typewriterCleanup as (() => void) | undefined;
-		if (typeof cleanup === 'function') {
-			try { cleanup(); } catch (e) { /* ignore */ }
+		try {
+			view.dispatch({
+				effects: this.typewriterCompartment.reconfigure([]),
+			});
+		} catch {
+			// Editor may already be torn down.
 		}
+
+		const scroller = (view.dom.querySelector(".cm-scroller") as HTMLElement | null) ?? view.dom;
+		scroller.style.paddingTop = "";
+		scroller.classList.remove("typewriter-top-padding");
 	}
 
-	addStyles(leaf: WorkspaceLeaf) {
-		const viewEl = leaf.view.contentEl
-		const header = leaf.view.headerEl
-		const isGraph = leaf.view.getViewType() === "graph"
+	private addStyles(leaf: WorkspaceLeaf) {
+		const view = this.getTypeZenView(leaf);
+		const viewEl = view.contentEl;
+		const header = view.headerEl;
+		const isGraph = view.getViewType() === "graph";
+		const graphControls = isGraph ? view.dataEngine?.controlsEl : undefined;
 
-		let graphControls: HTMLElement;
-		if (isGraph) { graphControls = leaf.view.dataEngine.controlsEl}
-		if (!this.settings.showScroll) {
-			this.applyNoScroll(leaf);
+		if (isGraph && !this.settings.showGraphControls) {
+			graphControls?.classList.add("hide");
 		}
-		if (isGraph && !this.settings.showGraphControls) { graphControls.classList.add("hide") }
-		isGraph ? viewEl.classList.add("vignette-radial") : viewEl.classList.add("vignette-linear")
-		if (!isGraph && this.settings.forceReadable) { leaf.view.editMode.editorEl.classList.add("is-readable-line-width") }
+
+		viewEl.classList.add(isGraph ? "vignette-radial" : "vignette-linear", "animate");
+
+		if (!isGraph && this.settings.forceReadable) {
+			view.editMode?.editorEl?.classList.add("is-readable-line-width");
+		}
 
 		this.enableTypewriter(leaf);
 
-		viewEl.classList.add("animate")
-		this.settings.showHeader ? header.classList.add("animate") : header.classList.add("hide")
+		if (this.settings.showHeader) {
+			header.classList.add("animate");
+		} else {
+			header.classList.add("hide");
+		}
 	}
 
-	removeStyles(leaf: WorkspaceLeaf) {
-		const viewEl = leaf.view.contentEl
-		const header = leaf.view.headerEl
-		const isGraph = leaf.view.getViewType() === "graph"
+	private removeStyles(leaf: WorkspaceLeaf) {
+		const view = this.getTypeZenView(leaf);
+		const viewEl = view.contentEl;
+		const header = view.headerEl;
+		const isGraph = view.getViewType() === "graph";
 
-		let graphControls: HTMLElement;
 		if (isGraph) {
-			graphControls = leaf.view.dataEngine.controlsEl
-			graphControls.classList.remove("animate", "hide")
-		} else if (!this.app.vault.getConfig('readableLineLength')) {
-			leaf.view.editMode.editorEl.classList.remove("is-readable-line-width")
+			view.dataEngine?.controlsEl?.classList.remove("animate", "hide");
+		} else {
+			const vault = this.app.vault as { getConfig?: (key: string) => unknown };
+			if (!vault.getConfig?.("readableLineLength")) {
+				view.editMode?.editorEl?.classList.remove("is-readable-line-width");
+			}
 		}
 
-		viewEl.classList.remove("vignette-linear", "vignette-radial", "animate")
-		header.classList.remove("animate", "hide")
+		viewEl.classList.remove("vignette-linear", "vignette-radial", "animate");
+		header.classList.remove("animate", "hide");
 
-		this.removeNoScroll(leaf);
-
-		this.disableTypewriter(leaf);
+		this.disableTypewriter();
 	}
 }
 
@@ -378,141 +394,120 @@ class TypeZenSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
-		const {containerEl} = this;
-
+		const { containerEl } = this;
 		containerEl.empty();
 
-		this.containerEl.createEl("h3", {
-			text: "Vignette",
-		})
-
-// VIGNETTE OPACITY SETTING
-		let vignetteOpacityNumber: HTMLDivElement;
-		new Setting(containerEl)
-			.setName('Opacity')
-			.setDesc("Intensity of vignette's dimming effect. Set to 0 to turn vignetting off.")
-			.addSlider((slider) => slider
-				.setLimits(0.00,1,0.01)
-				.setValue(this.plugin.settings.vignetteOpacity)
-				.onChange(async (value) => {
-					vignetteOpacityNumber.innerText = " " + value.toString();
-					this.plugin.settings.vignetteOpacity = value;
-					await this.plugin.saveSettings();
-				}))
-				.settingEl.createDiv("", (el: HTMLDivElement) => {
-					vignetteOpacityNumber = el;
-					el.style.minWidth = "2.0em";
-					el.style.textAlign = "right";
-					el.innerText = " " + this.plugin.settings.vignetteOpacity.toString();
-				});
-
-// VIGNETTE SCALE LINEAR SETTING
-		let vignetteScaleLinearNumber: HTMLDivElement;
-		new Setting(containerEl)
-			.setName('Scale in text views')
-			.setDesc("Determines how close to the screen's center vignetting spreads from both sides of the screen, as linear gradients.")
-			.addSlider((slider) => slider
-				.setLimits(5,50,5)
-				.setValue(this.plugin.settings.vignetteScaleLinear)
-				.onChange(async (value) => {
-					vignetteScaleLinearNumber.innerText = " " + value.toString();
-					this.plugin.settings.vignetteScaleLinear = value;
-					await this.plugin.saveSettings();
-				}))
-				.settingEl.createDiv("", (el: HTMLDivElement) => {
-					vignetteScaleLinearNumber = el;
-					el.style.minWidth = "2.0em";
-					el.style.textAlign = "right";
-					el.innerText = " " + this.plugin.settings.vignetteScaleLinear.toString();
-				});
-// VIGNETTE SCALE RADIAL SETTING
-		let vignetteScaleRadialNumber: HTMLDivElement;
-		new Setting(containerEl)
-			.setName('Scale in graph view')
-			.setDesc("Determines how close to the screen's center vignetting spreads from borders of the screen, as a radial gradient.")
-			.addSlider((slider) => slider
-				.setLimits(5,100,5)
-				.setValue(this.plugin.settings.vignetteScaleRadial)
-				.onChange(async (value) => {
-					vignetteScaleRadialNumber.innerText = " " + value.toString();
-					this.plugin.settings.vignetteScaleRadial = value;
-					await this.plugin.saveSettings();
-				}))
-				.settingEl.createDiv("", (el: HTMLDivElement) => {
-					vignetteScaleRadialNumber = el;
-					el.style.minWidth = "2.0em";
-					el.style.textAlign = "right";
-					el.innerText = " " + this.plugin.settings.vignetteScaleRadial.toString();
-				});
-
-		this.containerEl.createEl("h3", {
-			text: "Animation",
-		})
-// CONTENT FADE-IN DURATION SETTING
-		new Setting(containerEl)
-			.setName('Fade-in duration')
-			.setDesc('The duration (in seconds) of fade-in animation on entering Zen mode')
-			.addText(text => text
-				.setPlaceholder('1.2')
-				.setValue(String(this.plugin.settings.animationDuration))
-				.onChange(async (value) => {
-					this.plugin.settings.animationDuration = Number(value)
-					await this.plugin.saveSettings();
-				}));
-
-		this.containerEl.createEl("h3", {
-			text: "Element Toggles",
-		})
-
-// SHOW HEADER TOGGLE SETTING
-		new Setting(containerEl)
-			.setName("Show header")
-			.setDesc("Show the tab's header in Zen mode")
-			.addToggle((toggle) =>	toggle
-				.setValue(this.plugin.settings.showHeader)
-				.onChange(async (value) => {
-					this.plugin.settings.showHeader = value;
-					await this.plugin.saveSettings();
-			})
+		containerEl.createEl("h3", { text: "Vignette" });
+		this.addSliderSetting(
+			containerEl,
+			"Opacity",
+			"Intensity of vignette's dimming effect. Set to 0 to turn vignetting off.",
+			{ min: 0, max: 1, step: 0.01 },
+			"vignetteOpacity",
 		);
-// SHOW SCROLLBAR TOGGLE SETTING
-		new Setting(containerEl)
-			.setName("Show scrollbar")
-			.setDesc("Show the scrollbar in Zen mode. If it is hidden, scrolling is still available with mousewheel, arrows, touchpad, etc.")
-			.addToggle((toggle) =>	toggle
-				.setValue(this.plugin.settings.showScroll)
-				.onChange(async (value) => {
-					this.plugin.settings.showScroll = value;
-					await this.plugin.saveSettings();
-			})
+		this.addSliderSetting(
+			containerEl,
+			"Scale in text views",
+			"Determines how close to the screen's center vignetting spreads from both sides of the screen, as linear gradients.",
+			{ min: 5, max: 50, step: 5 },
+			"vignetteScaleLinear",
 		);
-// SHOW GRAPH CONTROLS SETTING
-		new Setting(containerEl)
-			.setName("Show graph controls")
-			.setDesc("Show the graph view's controls in Zen mode")
-			.addToggle((toggle) =>	toggle
-				.setValue(this.plugin.settings.showGraphControls)
-				.onChange(async (value) => {
-					this.plugin.settings.showGraphControls = value;
-					await this.plugin.saveSettings();
-			})
+		this.addSliderSetting(
+			containerEl,
+			"Scale in graph view",
+			"Determines how close to the screen's center vignetting spreads from borders of the screen, as a radial gradient.",
+			{ min: 5, max: 100, step: 5 },
+			"vignetteScaleRadial",
 		);
 
-		this.containerEl.createEl("h3", {
-			text: "Misc",
-		})
-
-// FORCE READABLE SETTING
+		containerEl.createEl("h3", { text: "Animation" });
 		new Setting(containerEl)
-			.setName("Force content centering")
-			.setDesc("Center text content in Zen mode, even if in regular view it takes all of the screen's width (ignore 'Editor -> Readable line length' being off in Zen mode)")
-			.addToggle((toggle) =>	toggle
-				.setValue(this.plugin.settings.forceReadable)
-				.onChange(async (value) => {
-					this.plugin.settings.forceReadable = value;
-					await this.plugin.saveSettings();
-			})
+			.setName("Fade-in duration")
+			.setDesc("The duration (in seconds) of fade-in animation on entering Zen mode")
+			.addText((text) =>
+				text
+					.setPlaceholder("1.2")
+					.setValue(String(this.plugin.settings.animationDuration))
+					.onChange(async (value) => {
+						const parsed = Number(value);
+						if (!Number.isFinite(parsed) || parsed < 0) return;
+						this.plugin.settings.animationDuration = parsed;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		containerEl.createEl("h3", { text: "Element Toggles" });
+		this.addToggleSetting(
+			containerEl,
+			"Show header",
+			"Show the tab's header in Zen mode",
+			"showHeader",
+		);
+		this.addToggleSetting(
+			containerEl,
+			"Show scrollbar",
+			"Show the scrollbar in Zen mode. If it is hidden, scrolling is still available with mousewheel, arrows, touchpad, etc.",
+			"showScroll",
+		);
+		this.addToggleSetting(
+			containerEl,
+			"Show graph controls",
+			"Show the graph view's controls in Zen mode",
+			"showGraphControls",
+		);
+
+		containerEl.createEl("h3", { text: "Misc" });
+		this.addToggleSetting(
+			containerEl,
+			"Force content centering",
+			"Center text content in Zen mode, even if in regular view it takes all of the screen's width (ignore 'Editor -> Readable line length' being off in Zen mode)",
+			"forceReadable",
 		);
 	}
 
+	private addSliderSetting(
+		containerEl: HTMLElement,
+		name: string,
+		desc: string,
+		limits: { min: number; max: number; step: number },
+		key: "vignetteOpacity" | "vignetteScaleLinear" | "vignetteScaleRadial",
+	) {
+		let valueEl: HTMLDivElement;
+		new Setting(containerEl)
+			.setName(name)
+			.setDesc(desc)
+			.addSlider((slider) =>
+				slider
+					.setLimits(limits.min, limits.max, limits.step)
+					.setValue(this.plugin.settings[key])
+					.onChange(async (value) => {
+						valueEl.innerText = " " + value.toString();
+						this.plugin.settings[key] = value;
+						await this.plugin.saveSettings();
+					}),
+			)
+			.settingEl.createDiv("", (el: HTMLDivElement) => {
+				valueEl = el;
+				el.style.minWidth = "2.0em";
+				el.style.textAlign = "right";
+				el.innerText = " " + this.plugin.settings[key].toString();
+			});
+	}
+
+	private addToggleSetting(
+		containerEl: HTMLElement,
+		name: string,
+		desc: string,
+		key: "showHeader" | "showScroll" | "showGraphControls" | "forceReadable",
+	) {
+		new Setting(containerEl)
+			.setName(name)
+			.setDesc(desc)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings[key]).onChange(async (value) => {
+					this.plugin.settings[key] = value;
+					await this.plugin.saveSettings();
+				}),
+			);
+	}
 }
