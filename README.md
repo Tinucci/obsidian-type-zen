@@ -17,11 +17,13 @@ npm run dev
 
 Open the local `test-vault` folder as a vault in Obsidian to try the plugin.
 
-Create a production bundle with:
+Create a production plugin package with:
 
 ```sh
 npm run build
 ```
+
+The installable files are written to `out/`.
 
 ## Known Issues
 - [ ] When the cursor is in the note title, typewriter scrolling does not follow it.

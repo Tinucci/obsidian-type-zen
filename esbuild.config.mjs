@@ -1,6 +1,8 @@
 import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
+import fs from "fs";
+import path from "path";
 
 const banner =
 `/*
@@ -10,32 +12,50 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const production = process.argv[2] === "production";
+const outputDir = "out";
 
-esbuild.build({
-	banner: {
-		js: banner,
-	},
-	entryPoints: ['main.ts'],
-	bundle: true,
-	external: [
-		'obsidian',
-		'electron',
-		'@codemirror/autocomplete',
-		'@codemirror/collab',
-		'@codemirror/commands',
-		'@codemirror/language',
-		'@codemirror/lint',
-		'@codemirror/search',
-		'@codemirror/state',
-		'@codemirror/view',
-		'@lezer/common',
-		'@lezer/highlight',
-		'@lezer/lr',
-		...builtins],
-	format: 'cjs',
-	target: 'es2018',
-	logLevel: "info",
-	sourcemap: production ? false : 'inline',
-	treeShaking: true,
-	outfile: 'main.js',
-}).catch(() => process.exit(1));
+if (production) {
+	fs.rmSync(outputDir, { recursive: true, force: true });
+	fs.mkdirSync(outputDir, { recursive: true });
+	fs.rmSync('main.js', { force: true });
+}
+
+try {
+	await esbuild.build({
+		banner: {
+			js: banner,
+		},
+		entryPoints: ['main.ts'],
+		bundle: true,
+		external: [
+			'obsidian',
+			'electron',
+			'@codemirror/autocomplete',
+			'@codemirror/collab',
+			'@codemirror/commands',
+			'@codemirror/language',
+			'@codemirror/lint',
+			'@codemirror/search',
+			'@codemirror/state',
+			'@codemirror/view',
+			'@lezer/common',
+			'@lezer/highlight',
+			'@lezer/lr',
+			...builtins],
+		format: 'cjs',
+		target: 'es2018',
+		logLevel: "info",
+		sourcemap: production ? false : 'inline',
+		treeShaking: true,
+		outfile: production ? path.join(outputDir, 'main.js') : 'main.js',
+	});
+
+	if (production) {
+		for (const file of ['manifest.json', 'styles.css', 'versions.json']) {
+			fs.copyFileSync(file, path.join(outputDir, file));
+		}
+	}
+} catch (error) {
+	console.error(error);
+	process.exitCode = 1;
+}
