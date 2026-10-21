@@ -54,9 +54,13 @@ export default class TypeZen extends Plugin {
 	private zenLeaf: WorkspaceLeaf | null = null;
 	private escapeHandler: ((event: KeyboardEvent) => void) | null = null;
 	private centerRafId = 0;
+	private scrollAnimationFrameId = 0;
+	private pendingCenter: { leaf: WorkspaceLeaf; behavior: ScrollBehavior } | null = null;
+	private scrollTarget: { scroller: HTMLElement; top: number } | null = null;
 	private editorObserver: MutationObserver | null = null;
 	private typewriterCompartment = new Compartment();
 	private typewriterView: EditorView | null = null;
+	private typewriterScroller: HTMLElement | null = null;
 	private typewriterConfigured = new WeakSet<EditorView>();
 	private typewriterResizeObserver: ResizeObserver | null = null;
 	private typewriterPointerListeners: TypewriterPointerListeners | null = null;
@@ -267,7 +271,8 @@ export default class TypeZen extends Plugin {
 	}
 
 	private waitForEditor(leaf: WorkspaceLeaf) {
-		this.cancelEditorSetup();
+		this.editorObserver?.disconnect();
+		this.editorObserver = null;
 		let initialized = false;
 
 		const initialize = () => {
@@ -287,10 +292,6 @@ export default class TypeZen extends Plugin {
 			this.getTypeZenView(leaf).editMode?.editor?.focus?.();
 			this.applyReadableLineWidth(this.getTypeZenView(leaf));
 			this.enableTypewriter(leaf);
-			this.centerRafId = requestAnimationFrame(() => {
-				this.centerRafId = 0;
-				this.centerCaret(leaf);
-			});
 		};
 
 		initialize();
@@ -306,32 +307,102 @@ export default class TypeZen extends Plugin {
 	private cancelEditorSetup() {
 		this.editorObserver?.disconnect();
 		this.editorObserver = null;
+		this.cancelCaretMotion();
+	}
+
+	private cancelCaretMotion() {
+		this.pendingCenter = null;
 		if (this.centerRafId) {
 			cancelAnimationFrame(this.centerRafId);
 			this.centerRafId = 0;
 		}
+		if (this.scrollAnimationFrameId) {
+			cancelAnimationFrame(this.scrollAnimationFrameId);
+			this.scrollAnimationFrameId = 0;
+		}
+		this.scrollTarget = null;
 	}
 
 	private centerCaret(leaf: WorkspaceLeaf, behavior: ScrollBehavior = "auto") {
+		const preserveSmoothRequest = this.pendingCenter?.leaf === leaf &&
+			this.pendingCenter.behavior === "smooth";
+		this.pendingCenter = {
+			leaf,
+			behavior: preserveSmoothRequest ? "smooth" : behavior,
+		};
+		if (this.centerRafId) return;
+
+		this.centerRafId = requestAnimationFrame(() => {
+			this.centerRafId = 0;
+			const request = this.pendingCenter;
+			this.pendingCenter = null;
+			if (!request) return;
+
+			const target = this.getCaretScrollTarget(request.leaf);
+			if (!target) return;
+
+			const animationActive = this.scrollAnimationFrameId !== 0;
+			const shouldAnimate = request.behavior === "smooth" &&
+				!window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+			if (animationActive || shouldAnimate) {
+				this.scrollTarget = target;
+				this.animateCaretScroll();
+				return;
+			}
+
+			if (Math.abs(target.top - target.scroller.scrollTop) >= 1) {
+				target.scroller.scrollTop = target.top;
+			}
+		});
+	}
+
+	private getCaretScrollTarget(leaf: WorkspaceLeaf): { scroller: HTMLElement; top: number } | null {
 		try {
 			const view = this.getEditorView(leaf);
-			if (!view) return;
+			if (!view) return null;
 
-			const scroller = (view.dom.querySelector(".cm-scroller") as HTMLElement | null) ?? view.dom;
-			const pos = view.state.selection.main.head;
-			const coords = view.coordsAtPos(pos);
-			if (!coords) return;
+			const scroller = this.typewriterView === view && this.typewriterScroller
+				? this.typewriterScroller
+				: (view.dom.querySelector(".cm-scroller") as HTMLElement | null) ?? view.dom;
+			const coords = view.coordsAtPos(view.state.selection.main.head);
+			if (!coords) return null;
 
 			const scrollerRect = scroller.getBoundingClientRect();
 			const lineHeight = Math.max(1, coords.bottom - coords.top);
-			const caretTopInScroller = coords.top - scrollerRect.top + scroller.scrollTop;
-			const target = caretTopInScroller - scroller.clientHeight / 2 + lineHeight / 2;
+			const caretTop = coords.top - scrollerRect.top + scroller.scrollTop;
+			const top = caretTop - scroller.clientHeight / 2 + lineHeight / 2;
 
-			if (!Number.isFinite(target)) return;
-			scroller.scrollTo({ top: target, behavior });
+			return Number.isFinite(top) ? { scroller, top } : null;
 		} catch {
 			// Best-effort only; never throw from a scroll helper.
+			return null;
 		}
+	}
+
+	private animateCaretScroll() {
+		if (this.scrollAnimationFrameId) return;
+
+		const animate = () => {
+			const target = this.scrollTarget;
+			if (!target || !target.scroller.isConnected) {
+				this.scrollAnimationFrameId = 0;
+				this.scrollTarget = null;
+				return;
+			}
+
+			const distance = target.top - target.scroller.scrollTop;
+			if (Math.abs(distance) < 0.75) {
+				target.scroller.scrollTop = target.top;
+				this.scrollAnimationFrameId = 0;
+				this.scrollTarget = null;
+				return;
+			}
+
+			target.scroller.scrollTop += distance * 0.24;
+			this.scrollAnimationFrameId = requestAnimationFrame(animate);
+		};
+
+		this.scrollAnimationFrameId = requestAnimationFrame(animate);
 	}
 
 	private enableTypewriter(leaf: WorkspaceLeaf) {
@@ -343,6 +414,7 @@ export default class TypeZen extends Plugin {
 		this.typewriterView = view;
 
 		const scroller = (view.dom.querySelector(".cm-scroller") as HTMLElement | null) ?? view.dom;
+		this.typewriterScroller = scroller;
 		this.applyTypewriterPadding(view, scroller);
 
 		this.typewriterResizeObserver = new ResizeObserver(() => {
@@ -381,6 +453,7 @@ export default class TypeZen extends Plugin {
 		}
 
 		const onPointerDown: EventListener = () => {
+			this.cancelCaretMotion();
 			waitingForKeyboardInput = true;
 			smoothNextCenter = false;
 		};
@@ -408,9 +481,12 @@ export default class TypeZen extends Plugin {
 		this.typewriterResizeObserver?.disconnect();
 		this.typewriterResizeObserver = null;
 		this.removeTypewriterPointerListeners();
+		this.cancelCaretMotion();
 
 		const view = this.typewriterView;
 		this.typewriterView = null;
+		const scroller = this.typewriterScroller;
+		this.typewriterScroller = null;
 		if (!view) return;
 
 		try {
@@ -421,8 +497,7 @@ export default class TypeZen extends Plugin {
 			// Editor may already be torn down.
 		}
 
-		const scroller = (view.dom.querySelector(".cm-scroller") as HTMLElement | null) ?? view.dom;
-		scroller.style.paddingTop = "";
+		(scroller ?? view.dom).style.paddingTop = "";
 	}
 
 	private removeTypewriterPointerListeners() {
