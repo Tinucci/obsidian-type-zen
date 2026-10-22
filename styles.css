@@ -13,6 +13,12 @@
 	height: 0;
 }
 
+/* Neutralize vignette classes left on views by earlier plugin versions. */
+.typezen-fullscreen .vignette-linear,
+.typezen-fullscreen .vignette-radial {
+	background: none !important;
+}
+
 .typezen-fullscreen.animate,
 .typezen-fullscreen .animate {
 	animation: typezen-fade-in var(--fadeIn-duration) ease-out both;

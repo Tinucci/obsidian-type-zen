@@ -644,6 +644,8 @@ export default class TypeZen extends Plugin {
 		const viewEl = view.contentEl;
 		const isGraph = view.getViewType() === "graph";
 
+		// Clear classes left behind by earlier versions that applied vignette gradients.
+		viewEl.classList.remove("vignette-linear", "vignette-radial");
 		viewEl.classList.add("animate");
 
 		if (!isGraph) {
