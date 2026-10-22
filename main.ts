@@ -8,9 +8,6 @@ interface PluginSettings {
 	showScroll: boolean;
 	showGraphControls: boolean;
 	forceReadable: boolean;
-	vignetteOpacity: number;
-	vignetteScaleLinear: number;
-	vignetteScaleRadial: number;
 	caretScrollDuration: number;
 	caretVerticalPosition: number;
 }
@@ -41,9 +38,6 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	showScroll: false,
 	showGraphControls: false,
 	forceReadable: true,
-	vignetteOpacity: 0.14,
-	vignetteScaleLinear: 20,
-	vignetteScaleRadial: 45,
 	caretScrollDuration: 240,
 	caretVerticalPosition: 50,
 };
@@ -202,9 +196,6 @@ export default class TypeZen extends Plugin {
 	private applyCssVariables() {
 		const root = document.documentElement;
 		root.style.setProperty("--fadeIn-duration", this.settings.animationDuration + "s");
-		root.style.setProperty("--vignette-opacity", this.settings.vignetteOpacity.toString());
-		root.style.setProperty("--vignette-scale-linear", this.settings.vignetteScaleLinear + "%");
-		root.style.setProperty("--vignette-scale-radial", this.settings.vignetteScaleRadial + "%");
 	}
 
 	private captureCssVariables() {
@@ -212,7 +203,7 @@ export default class TypeZen extends Plugin {
 
 		const style = document.documentElement.style;
 		this.cssVariableSnapshot = new Map(
-			["--fadeIn-duration", "--vignette-opacity", "--vignette-scale-linear", "--vignette-scale-radial"]
+			["--fadeIn-duration"]
 				.map((name) => [
 					name,
 					{ value: style.getPropertyValue(name), priority: style.getPropertyPriority(name) },
@@ -653,7 +644,7 @@ export default class TypeZen extends Plugin {
 		const viewEl = view.contentEl;
 		const isGraph = view.getViewType() === "graph";
 
-		viewEl.classList.add(isGraph ? "vignette-radial" : "vignette-linear", "animate");
+		viewEl.classList.add("animate");
 
 		if (!isGraph) {
 			this.applyReadableLineWidth(view);
@@ -692,29 +683,6 @@ class TypeZenSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-
-		containerEl.createEl("h3", { text: "Vignette" });
-		this.addSliderSetting(
-			containerEl,
-			"Opacity",
-			"Intensity of vignette's dimming effect. Set to 0 to turn vignetting off.",
-			{ min: 0, max: 1, step: 0.01 },
-			"vignetteOpacity",
-		);
-		this.addSliderSetting(
-			containerEl,
-			"Scale in text views",
-			"Determines how close to the screen's center vignetting spreads from both sides of the screen, as linear gradients.",
-			{ min: 5, max: 50, step: 5 },
-			"vignetteScaleLinear",
-		);
-		this.addSliderSetting(
-			containerEl,
-			"Scale in graph view",
-			"Determines how close to the screen's center vignetting spreads from borders of the screen, as a radial gradient.",
-			{ min: 5, max: 100, step: 5 },
-			"vignetteScaleRadial",
-		);
 
 		containerEl.createEl("h3", { text: "Writing behavior" });
 		this.addSliderSetting(
@@ -783,7 +751,7 @@ class TypeZenSettingTab extends PluginSettingTab {
 		name: string,
 		desc: string,
 		limits: { min: number; max: number; step: number },
-		key: "vignetteOpacity" | "vignetteScaleLinear" | "vignetteScaleRadial" | "caretScrollDuration" | "caretVerticalPosition",
+		key: "caretScrollDuration" | "caretVerticalPosition",
 		onChange?: () => void,
 	) {
 		new Setting(containerEl)

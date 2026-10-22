@@ -1,14 +1,5 @@
 :root {
-	--vignette-opacity: 0.14;
 	--fadeIn-duration: 0.25s;
-	--vignette-scale-linear: 20%;
-	--vignette-scale-radial: 45%;
-	--vignette-exponent: 2;
-	--typezen-vignette-rgb: 0, 0, 0;
-}
-
-.theme-light {
-	--typezen-vignette-rgb: 48, 48, 48;
 }
 
 .typezen-hide-scroll .cm-scroller {
@@ -20,40 +11,6 @@
 	display: none;
 	width: 0;
 	height: 0;
-}
-
-.typezen-fullscreen .vignette-linear {
-	background: linear-gradient(
-		90deg,
-		rgba(var(--typezen-vignette-rgb), var(--vignette-opacity)) 0%,
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.8, var(--vignette-exponent))))
-			calc(var(--vignette-scale-linear) * 0.2),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.6, var(--vignette-exponent))))
-			calc(var(--vignette-scale-linear) * 0.4),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.4, var(--vignette-exponent))))
-			calc(var(--vignette-scale-linear) * 0.6),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.2, var(--vignette-exponent))))
-			calc(var(--vignette-scale-linear) * 0.8),
-		transparent var(--vignette-scale-linear),
-		transparent calc(100% - var(--vignette-scale-linear)),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.2, var(--vignette-exponent))))
-			calc(100% - (var(--vignette-scale-linear) * 0.8)),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.4, var(--vignette-exponent))))
-			calc(100% - (var(--vignette-scale-linear) * 0.6)),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.6, var(--vignette-exponent))))
-			calc(100% - (var(--vignette-scale-linear) * 0.4)),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.8, var(--vignette-exponent))))
-			calc(100% - (var(--vignette-scale-linear) * 0.2)),
-		rgba(var(--typezen-vignette-rgb), var(--vignette-opacity)) 100%
-	) !important;
-}
-
-.typezen-fullscreen .vignette-radial {
-	background: radial-gradient(
-		circle,
-		transparent calc(100% - var(--vignette-scale-radial)),
-		rgba(var(--typezen-vignette-rgb), var(--vignette-opacity)) 100%
-	) !important;
 }
 
 .typezen-fullscreen.animate,
