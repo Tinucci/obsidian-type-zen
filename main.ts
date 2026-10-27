@@ -136,9 +136,12 @@ export default class TypeZen extends Plugin {
 		const folderPath = join(adapter.getBasePath(), folder.path === "/" ? "" : folder.path);
 		this.publishing = true;
 		new Notice(`Compiling ${folder.path} with PyPublisher…`);
-		const child = spawn(uv, ["run", "--no-sync", "python", "main.py", folderPath], {
+		const commandEnv: NodeJS.ProcessEnv = { ...process.env, PATH: this.getCommandPath() };
+		const pandoc = this.resolveExecutable("pandoc");
+		if (pandoc !== "pandoc") commandEnv.PYPANDOC_PANDOC = pandoc;
+		const child = spawn(uv, ["run", "--no-sync", join(project, "main.py"), folderPath], {
 			cwd: project,
-			env: { ...process.env, PATH: this.getCommandPath() },
+			env: commandEnv,
 		});
 		let output = "";
 		let failedToStart = false;
