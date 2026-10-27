@@ -2,7 +2,9 @@ import { App, FileSystemAdapter, ItemView, MarkdownView, Notice, Plugin, PluginS
 import { Compartment, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { spawn } from "child_process";
-import { join } from "path";
+import { accessSync, constants } from "fs";
+import { delimiter, join } from "path";
+import { homedir } from "os";
 
 interface PluginSettings {
 	animationDuration: number;
@@ -45,7 +47,7 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	caretScrollDuration: 240,
 	caretVerticalPosition: 50,
 	pyPublisherPath: "/Users/atinucci/Desktop/AI_Projects/PyPublisher",
-	uvPath: "uv",
+	uvPath: "/Users/atinucci/.local/bin/uv",
 };
 
 export default class TypeZen extends Plugin {
@@ -116,7 +118,7 @@ export default class TypeZen extends Plugin {
 			return;
 		}
 		const project = this.settings.pyPublisherPath.trim();
-		const uv = this.settings.uvPath.trim();
+		const uv = this.resolveExecutable(this.settings.uvPath.trim());
 		if (!project || !uv) {
 			new Notice("Set the PyPublisher folder and uv executable in TypeZen settings.");
 			return;
@@ -155,6 +157,27 @@ export default class TypeZen extends Plugin {
 				new Notice(`PyPublisher failed (exit ${code}). See the developer console for details.`, 10000);
 			}
 		});
+	}
+
+	private resolveExecutable(executable: string): string {
+		if (!executable || executable.includes("/") || executable.includes("\\")) return executable;
+		const directories = [
+			...(process.env.PATH ?? "").split(delimiter),
+			join(homedir(), ".local", "bin"),
+			join(homedir(), ".cargo", "bin"),
+			"/opt/homebrew/bin",
+			"/usr/local/bin",
+		];
+		for (const directory of directories) {
+			const candidate = join(directory, executable);
+			try {
+				accessSync(candidate, constants.X_OK);
+				return candidate;
+			} catch {
+				// Continue through common install locations when the app PATH is incomplete.
+			}
+		}
+		return executable;
 	}
 
 	onunload() {

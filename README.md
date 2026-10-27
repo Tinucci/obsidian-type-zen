@@ -9,10 +9,11 @@ TypeZen is an Obsidian Plugin to enhance the typewriting experience.
 ## Compile with PyPublisher
 
 The PyPublisher project path defaults to `/Users/atinucci/Desktop/AI_Projects/PyPublisher`.
-Change it in TypeZen settings if the project is elsewhere. Set the path to the
-`uv` executable too if Obsidian cannot find it (for example, the result of
-`which uv` in a terminal). PyPublisher and its dependencies must already be
-installed; TypeZen runs `uv` with `--no-sync`.
+Change it in TypeZen settings if the project is elsewhere. TypeZen searches
+common install locations for `uv` when Obsidian's app `PATH` cannot find it;
+you can set its absolute path in settings if it is installed elsewhere.
+PyPublisher and its dependencies must already be installed; TypeZen runs `uv`
+with `--no-sync`.
 
 Open a note in a folder containing `compile_config.yaml` and run **TypeZen:
 Compile active note's folder with PyPublisher** from the command palette, or
