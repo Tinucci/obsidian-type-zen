@@ -124,9 +124,10 @@ export default class TypeZen extends Plugin {
 			new Notice("PyPublisher requires a local vault.");
 			return;
 		}
-		const configPath = folder.path === "/" ? "compile_config.yaml" : `${folder.path}/compile_config.yaml`;
-		if (!this.app.vault.getAbstractFileByPath(configPath)) {
-			new Notice(`No compile_config.yaml found in ${folder.path}.`);
+		const folderPrefix = folder.path === "/" ? "" : `${folder.path}/`;
+		const configPaths = [`${folderPrefix}compile_config.yaml`, `${folderPrefix}compile_config.md`];
+		if (!configPaths.some((configPath) => this.app.vault.getAbstractFileByPath(configPath))) {
+			new Notice(`No compile_config.yaml or compile_config.md found in ${folder.path}.`);
 			return;
 		}
 		const folderPath = join(adapter.getBasePath(), folder.path === "/" ? "" : folder.path);

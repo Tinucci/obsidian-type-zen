@@ -1,3 +1,8 @@
+# Manuscript example configuration
+
+PyPublisher reads the YAML settings from this fenced block.
+
+```yaml
 compile:
   document:
     type: article
@@ -32,3 +37,4 @@ compile:
     epub:
       validate: true
       accessibility_checks: true
+```
