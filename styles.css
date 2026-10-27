@@ -1,14 +1,5 @@
 :root {
-	--vignette-opacity: 0.14;
 	--fadeIn-duration: 0.25s;
-	--vignette-scale-linear: 20%;
-	--vignette-scale-radial: 45%;
-	--vignette-exponent: 2;
-	--typezen-vignette-rgb: 0, 0, 0;
-}
-
-.theme-light {
-	--typezen-vignette-rgb: 48, 48, 48;
 }
 
 .typezen-hide-scroll .cm-scroller {
@@ -22,38 +13,10 @@
 	height: 0;
 }
 
-.typezen-fullscreen .vignette-linear {
-	background: linear-gradient(
-		90deg,
-		rgba(var(--typezen-vignette-rgb), var(--vignette-opacity)) 0%,
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.8, var(--vignette-exponent))))
-			calc(var(--vignette-scale-linear) * 0.2),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.6, var(--vignette-exponent))))
-			calc(var(--vignette-scale-linear) * 0.4),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.4, var(--vignette-exponent))))
-			calc(var(--vignette-scale-linear) * 0.6),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.2, var(--vignette-exponent))))
-			calc(var(--vignette-scale-linear) * 0.8),
-		transparent var(--vignette-scale-linear),
-		transparent calc(100% - var(--vignette-scale-linear)),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.2, var(--vignette-exponent))))
-			calc(100% - (var(--vignette-scale-linear) * 0.8)),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.4, var(--vignette-exponent))))
-			calc(100% - (var(--vignette-scale-linear) * 0.6)),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.6, var(--vignette-exponent))))
-			calc(100% - (var(--vignette-scale-linear) * 0.4)),
-		rgba(var(--typezen-vignette-rgb), calc(var(--vignette-opacity) * pow(0.8, var(--vignette-exponent))))
-			calc(100% - (var(--vignette-scale-linear) * 0.2)),
-		rgba(var(--typezen-vignette-rgb), var(--vignette-opacity)) 100%
-	) !important;
-}
-
+/* Neutralize vignette classes left on views by earlier plugin versions. */
+.typezen-fullscreen .vignette-linear,
 .typezen-fullscreen .vignette-radial {
-	background: radial-gradient(
-		circle,
-		transparent calc(100% - var(--vignette-scale-radial)),
-		rgba(var(--typezen-vignette-rgb), var(--vignette-opacity)) 100%
-	) !important;
+	background: none !important;
 }
 
 .typezen-fullscreen.animate,
@@ -117,8 +80,22 @@
 	display: none !important;
 }
 
-.typezen-fullscreen:not(.typezen-show-header) .workspace-leaf-header {
+.typezen-fullscreen .workspace-leaf-header {
 	display: none !important;
+}
+
+.typezen-file-path {
+	position: fixed;
+	top: 0.6rem;
+	right: 1rem;
+	z-index: 16;
+	max-width: 70vw;
+	overflow: hidden;
+	color: var(--text-faint);
+	font-size: var(--font-smaller);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	pointer-events: none;
 }
 
 /* Making lists not have bullet points and instead have dashes */

@@ -26,6 +26,3 @@ data.json
 
 # Exclude pnpm-lock.yaml
 pnpm-lock.yaml
-
-# Exclude test vault
-test-vault

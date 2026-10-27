@@ -1,18 +1,17 @@
-import { App, ItemView, MarkdownView, Plugin, PluginSettingTab, Setting, WorkspaceLeaf } from "obsidian";
+import { App, FileSystemAdapter, ItemView, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFolder, WorkspaceLeaf } from "obsidian";
 import { Compartment, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { spawn } from "child_process";
+import { accessSync, constants } from "fs";
+import { delimiter, join } from "path";
+import { homedir } from "os";
 
 interface PluginSettings {
 	animationDuration: number;
-	showHeader: boolean;
 	showScroll: boolean;
-	showGraphControls: boolean;
-	forceReadable: boolean;
-	vignetteOpacity: number;
-	vignetteScaleLinear: number;
-	vignetteScaleRadial: number;
 	caretScrollDuration: number;
 	caretVerticalPosition: number;
+	pyPublisherPath: string;
 }
 
 interface TypeZenItemView extends ItemView {
@@ -37,19 +36,18 @@ interface TypewriterPointerListeners {
 
 const DEFAULT_SETTINGS: PluginSettings = {
 	animationDuration: 0.25,
-	showHeader: false,
 	showScroll: false,
-	showGraphControls: false,
-	forceReadable: true,
-	vignetteOpacity: 0.14,
-	vignetteScaleLinear: 20,
-	vignetteScaleRadial: 45,
 	caretScrollDuration: 240,
 	caretVerticalPosition: 50,
+	pyPublisherPath: "/Users/atinucci/Desktop/AI_Projects/PyPublisher",
 };
+
+const UV_EXECUTABLE = "/Users/atinucci/.local/bin/uv";
 
 export default class TypeZen extends Plugin {
 	settings: PluginSettings;
+	private publishing = false;
+	private zenFilePathEl: HTMLElement | null = null;
 
 	private zenLeaf: WorkspaceLeaf | null = null;
 	private escapeHandler: ((event: KeyboardEvent) => void) | null = null;
@@ -87,7 +85,116 @@ export default class TypeZen extends Plugin {
 			name: "Zen mode",
 			callback: () => this.toggleZenMode(),
 		});
+		this.addCommand({
+			id: "compile-with-pypublisher",
+			name: "Compile active note's folder with PyPublisher",
+			callback: () => {
+				const folder = this.app.workspace.getActiveFile()?.parent;
+				if (!folder) {
+					new Notice("Open a note in the manuscript folder first.");
+					return;
+				}
+				this.compileFolder(folder);
+			},
+		});
+		this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
+			if (file instanceof TFolder) {
+				menu.addItem((item) => item.setTitle("Compile with PyPublisher")
+					.setIcon("file-output")
+					.onClick(() => this.compileFolder(file)));
+			}
+		}));
+		this.registerEvent(this.app.workspace.on("file-open", (file) => this.updateZenFilePath(file)));
 		this.addSettingTab(new TypeZenSettingTab(this.app, this));
+	}
+
+	private compileFolder(folder: TFolder) {
+		if (this.publishing) {
+			new Notice("PyPublisher is already compiling a folder.");
+			return;
+		}
+		const project = this.settings.pyPublisherPath.trim();
+		const uv = UV_EXECUTABLE;
+		if (!project) {
+			new Notice("Set the PyPublisher folder in TypeZen settings.");
+			return;
+		}
+		const adapter = this.app.vault.adapter;
+		if (!(adapter instanceof FileSystemAdapter)) {
+			new Notice("PyPublisher requires a local vault.");
+			return;
+		}
+		const configPath = folder.path === "/" ? "compile_config.yaml" : `${folder.path}/compile_config.yaml`;
+		if (!this.app.vault.getAbstractFileByPath(configPath)) {
+			new Notice(`No compile_config.yaml found in ${folder.path}.`);
+			return;
+		}
+		const folderPath = join(adapter.getBasePath(), folder.path === "/" ? "" : folder.path);
+		this.publishing = true;
+		new Notice(`Compiling ${folder.path} with PyPublisher…`);
+		const commandEnv: NodeJS.ProcessEnv = { ...process.env, PATH: this.getCommandPath() };
+		const pandoc = this.resolveExecutable("pandoc");
+		if (pandoc !== "pandoc") commandEnv.PYPANDOC_PANDOC = pandoc;
+		const child = spawn(uv, ["run", "--no-sync", join(project, "main.py"), folderPath], {
+			cwd: project,
+			env: commandEnv,
+		});
+		let output = "";
+		let failedToStart = false;
+		child.stdout.on("data", (data: Buffer) => { output = (output + data.toString()).slice(-16000); });
+		child.stderr.on("data", (data: Buffer) => { output = (output + data.toString()).slice(-16000); });
+		child.on("error", (error) => {
+			failedToStart = true;
+			this.publishing = false;
+			console.error("PyPublisher could not start:", error);
+			new Notice(`Could not start PyPublisher: ${error.message}`, 10000);
+		});
+		child.on("close", (code) => {
+			if (failedToStart) return;
+			this.publishing = false;
+			if (code === 0) {
+				new Notice(`PyPublisher finished compiling ${folder.path}.`);
+			} else {
+				console.error("PyPublisher failed:", output);
+				new Notice(`PyPublisher failed (exit ${code}). See the developer console for details.`, 10000);
+			}
+		});
+	}
+
+	private resolveExecutable(executable: string): string {
+		if (!executable || executable.includes("/") || executable.includes("\\")) return executable;
+		const directories = [
+			...(process.env.PATH ?? "").split(delimiter),
+			join(homedir(), ".local", "bin"),
+			join(homedir(), ".cargo", "bin"),
+			"/opt/homebrew/bin",
+			"/usr/local/bin",
+		];
+		for (const directory of directories) {
+			const candidate = join(directory, executable);
+			try {
+				accessSync(candidate, constants.X_OK);
+				return candidate;
+			} catch {
+				// Continue through common install locations when the app PATH is incomplete.
+			}
+		}
+		return executable;
+	}
+
+	private getCommandPath(): string {
+		const paths = [
+			...(process.env.PATH ?? "").split(delimiter),
+			"/opt/homebrew/bin",
+			"/opt/homebrew/sbin",
+			"/usr/local/bin",
+			"/usr/local/sbin",
+			"/Library/TeX/texbin",
+			"/usr/bin",
+			"/bin",
+			join(homedir(), ".local", "bin"),
+		];
+		return [...new Set(paths.filter(Boolean))].join(delimiter);
 	}
 
 	onunload() {
@@ -102,7 +209,14 @@ export default class TypeZen extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const saved = ((await this.loadData()) ?? {}) as Partial<PluginSettings>;
+		this.settings = {
+			animationDuration: saved.animationDuration ?? DEFAULT_SETTINGS.animationDuration,
+			showScroll: saved.showScroll ?? DEFAULT_SETTINGS.showScroll,
+			caretScrollDuration: saved.caretScrollDuration ?? DEFAULT_SETTINGS.caretScrollDuration,
+			caretVerticalPosition: saved.caretVerticalPosition ?? DEFAULT_SETTINGS.caretVerticalPosition,
+			pyPublisherPath: saved.pyPublisherPath ?? DEFAULT_SETTINGS.pyPublisherPath,
+		};
 		if (!Number.isFinite(this.settings.caretScrollDuration)) {
 			this.settings.caretScrollDuration = DEFAULT_SETTINGS.caretScrollDuration;
 		}
@@ -165,6 +279,7 @@ export default class TypeZen extends Plugin {
 
 		const root = this.getZenRoot();
 		root.classList.add("typezen-fullscreen");
+		this.createZenFilePath(leaf);
 		requestAnimationFrame(() => {
 			if (this.isZenActive()) root.classList.add("animate");
 		});
@@ -183,9 +298,10 @@ export default class TypeZen extends Plugin {
 		this.getZenRoot().classList.remove(
 			"typezen-fullscreen",
 			"animate",
-			"typezen-show-header",
 			"typezen-hide-scroll",
 		);
+		this.zenFilePathEl?.remove();
+		this.zenFilePathEl = null;
 
 		const leaf = this.zenLeaf ?? this.app.workspace.getActiveViewOfType(ItemView)?.leaf;
 		if (leaf) {
@@ -202,9 +318,6 @@ export default class TypeZen extends Plugin {
 	private applyCssVariables() {
 		const root = document.documentElement;
 		root.style.setProperty("--fadeIn-duration", this.settings.animationDuration + "s");
-		root.style.setProperty("--vignette-opacity", this.settings.vignetteOpacity.toString());
-		root.style.setProperty("--vignette-scale-linear", this.settings.vignetteScaleLinear + "%");
-		root.style.setProperty("--vignette-scale-radial", this.settings.vignetteScaleRadial + "%");
 	}
 
 	private captureCssVariables() {
@@ -212,7 +325,7 @@ export default class TypeZen extends Plugin {
 
 		const style = document.documentElement.style;
 		this.cssVariableSnapshot = new Map(
-			["--fadeIn-duration", "--vignette-opacity", "--vignette-scale-linear", "--vignette-scale-radial"]
+			["--fadeIn-duration"]
 				.map((name) => [
 					name,
 					{ value: style.getPropertyValue(name), priority: style.getPropertyPriority(name) },
@@ -238,7 +351,6 @@ export default class TypeZen extends Plugin {
 		this.applyCssVariables();
 
 		const root = this.getZenRoot();
-		root.classList.toggle("typezen-show-header", this.settings.showHeader);
 		root.classList.toggle("typezen-hide-scroll", !this.settings.showScroll);
 
 		const leaf = this.zenLeaf;
@@ -246,23 +358,46 @@ export default class TypeZen extends Plugin {
 
 		const view = this.getTypeZenView(leaf);
 		const isGraph = view.getViewType() === "graph";
-		view.headerEl.classList.toggle("hide", !this.settings.showHeader);
-		view.headerEl.classList.toggle("animate", this.settings.showHeader);
+		view.headerEl.classList.add("hide");
+		view.headerEl.classList.remove("animate");
 
 		if (isGraph) {
-			view.dataEngine?.controlsEl?.classList.toggle("hide", !this.settings.showGraphControls);
+			view.dataEngine?.controlsEl?.classList.add("hide");
 		} else {
 			this.applyReadableLineWidth(view);
 		}
 	}
 
-	private applyReadableLineWidth(view: TypeZenItemView, forceReadable = this.settings.forceReadable) {
+	private applyReadableLineWidth(view: TypeZenItemView, zenMode = true) {
 		const vault = this.app.vault as { getConfig?: (key: string) => unknown };
 		const readableLineLength = vault.getConfig?.("readableLineLength") === true;
 		view.editMode?.editorEl?.classList.toggle(
 			"is-readable-line-width",
-			forceReadable || readableLineLength,
+			zenMode || readableLineLength,
 		);
+	}
+
+	private createZenFilePath(leaf: WorkspaceLeaf) {
+		this.zenFilePathEl?.remove();
+		if (leaf.view.getViewType() !== "markdown") return;
+		const file = this.app.workspace.getActiveFile();
+		if (!file) return;
+		const pathEl = document.createElement("div");
+		pathEl.className = "typezen-file-path";
+		pathEl.textContent = file.path;
+		pathEl.setAttribute("aria-label", "Active file path");
+		this.getZenRoot().appendChild(pathEl);
+		this.zenFilePathEl = pathEl;
+	}
+
+	private updateZenFilePath(file: import("obsidian").TFile | null) {
+		if (!this.isZenActive() || !this.zenFilePathEl) return;
+		if (!file) {
+			this.zenFilePathEl.remove();
+			this.zenFilePathEl = null;
+			return;
+		}
+		this.zenFilePathEl.textContent = file.path;
 	}
 
 	private bindEscapeHandler() {
@@ -653,7 +788,9 @@ export default class TypeZen extends Plugin {
 		const viewEl = view.contentEl;
 		const isGraph = view.getViewType() === "graph";
 
-		viewEl.classList.add(isGraph ? "vignette-radial" : "vignette-linear", "animate");
+		// Clear classes left behind by earlier versions that applied vignette gradients.
+		viewEl.classList.remove("vignette-linear", "vignette-radial");
+		viewEl.classList.add("animate");
 
 		if (!isGraph) {
 			this.applyReadableLineWidth(view);
@@ -693,28 +830,16 @@ class TypeZenSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h3", { text: "Vignette" });
-		this.addSliderSetting(
-			containerEl,
-			"Opacity",
-			"Intensity of vignette's dimming effect. Set to 0 to turn vignetting off.",
-			{ min: 0, max: 1, step: 0.01 },
-			"vignetteOpacity",
-		);
-		this.addSliderSetting(
-			containerEl,
-			"Scale in text views",
-			"Determines how close to the screen's center vignetting spreads from both sides of the screen, as linear gradients.",
-			{ min: 5, max: 50, step: 5 },
-			"vignetteScaleLinear",
-		);
-		this.addSliderSetting(
-			containerEl,
-			"Scale in graph view",
-			"Determines how close to the screen's center vignetting spreads from borders of the screen, as a radial gradient.",
-			{ min: 5, max: 100, step: 5 },
-			"vignetteScaleRadial",
-		);
+		containerEl.createEl("h3", { text: "PyPublisher" });
+		new Setting(containerEl)
+			.setName("PyPublisher folder")
+			.setDesc("Absolute path to the PyPublisher project folder.")
+			.addText((text) => text.setPlaceholder("/path/to/PyPublisher")
+				.setValue(this.plugin.settings.pyPublisherPath)
+				.onChange(async (value) => {
+					this.plugin.settings.pyPublisherPath = value;
+					await this.plugin.saveSettings();
+				}));
 
 		containerEl.createEl("h3", { text: "Writing behavior" });
 		this.addSliderSetting(
@@ -752,29 +877,9 @@ class TypeZenSettingTab extends PluginSettingTab {
 		containerEl.createEl("h3", { text: "Element Toggles" });
 		this.addToggleSetting(
 			containerEl,
-			"Show header",
-			"Show the tab's header in Zen mode",
-			"showHeader",
-		);
-		this.addToggleSetting(
-			containerEl,
 			"Show scrollbar",
 			"Show the scrollbar in Zen mode. If it is hidden, scrolling is still available with mousewheel, arrows, touchpad, etc.",
 			"showScroll",
-		);
-		this.addToggleSetting(
-			containerEl,
-			"Show graph controls",
-			"Show the graph view's controls in Zen mode",
-			"showGraphControls",
-		);
-
-		containerEl.createEl("h3", { text: "Misc" });
-		this.addToggleSetting(
-			containerEl,
-			"Force content centering",
-			"Center text content in Zen mode, even if in regular view it takes all of the screen's width (ignore 'Editor -> Readable line length' being off in Zen mode)",
-			"forceReadable",
 		);
 	}
 
@@ -783,7 +888,7 @@ class TypeZenSettingTab extends PluginSettingTab {
 		name: string,
 		desc: string,
 		limits: { min: number; max: number; step: number },
-		key: "vignetteOpacity" | "vignetteScaleLinear" | "vignetteScaleRadial" | "caretScrollDuration" | "caretVerticalPosition",
+		key: "caretScrollDuration" | "caretVerticalPosition",
 		onChange?: () => void,
 	) {
 		new Setting(containerEl)
@@ -805,7 +910,7 @@ class TypeZenSettingTab extends PluginSettingTab {
 		containerEl: HTMLElement,
 		name: string,
 		desc: string,
-		key: "showHeader" | "showScroll" | "showGraphControls" | "forceReadable",
+		key: "showScroll",
 	) {
 		new Setting(containerEl)
 			.setName(name)

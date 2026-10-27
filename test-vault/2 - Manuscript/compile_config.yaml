@@ -1,0 +1,34 @@
+compile:
+  document:
+    type: article
+
+  project:
+    title: "Title-Article"
+    subtitle: "Continuous Article Example"
+    author: "Author"
+    language: en
+    publisher: "Publisher omitted in article mode"
+    rights: "© 2026 Author"
+    series: "Series"
+    volume: "1"
+    subject: "Subject"
+    description: "Demonstrates continuous article layout."
+    contributor: "Illustrations by John Doe"
+
+  structure:
+    directory: "."
+    chapters:
+      numbered_chapters: roman
+      contents:
+        - files:
+            - "01_part.md"
+
+  # These are intentionally enabled to demonstrate that article mode suppresses
+  # standalone cover pages and document contents.
+  output:
+    cover: latex
+    toc: true
+    toc_depth: 2
+    epub:
+      validate: true
+      accessibility_checks: true
