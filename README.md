@@ -9,13 +9,13 @@ TypeZen is an Obsidian Plugin to enhance the typewriting experience.
 ## Compile with PyPublisher
 
 The PyPublisher project path defaults to `/Users/atinucci/Desktop/AI_Projects/PyPublisher`.
-Change it in TypeZen settings if the project is elsewhere. TypeZen searches
-common install locations for `uv` when Obsidian's app `PATH` cannot find it;
-you can set its absolute path in settings if it is installed elsewhere.
-PyPublisher and its dependencies must already be installed; TypeZen runs `uv`
-with `--no-sync`. It adds common Homebrew and TeX paths to the subprocess PATH
-so tools such as Pandoc and XeLaTeX remain available when Obsidian was opened
-from the desktop.
+Change it in TypeZen settings if the project is elsewhere. PyPublisher and its
+dependencies must already be installed; TypeZen runs `uv` with `--no-sync`.
+It adds common Homebrew and TeX paths to the subprocess PATH and passes the
+discovered Pandoc executable to PyPublisher.
+
+Zen mode hides the Obsidian tab header and shows only the active note's vault
+path. Content centering is always enabled, and graph controls remain hidden.
 
 Open a note in a folder containing `compile_config.yaml` and run **TypeZen:
 Compile active note's folder with PyPublisher** from the command palette, or

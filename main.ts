@@ -8,14 +8,10 @@ import { homedir } from "os";
 
 interface PluginSettings {
 	animationDuration: number;
-	showHeader: boolean;
 	showScroll: boolean;
-	showGraphControls: boolean;
-	forceReadable: boolean;
 	caretScrollDuration: number;
 	caretVerticalPosition: number;
 	pyPublisherPath: string;
-	uvPath: string;
 }
 
 interface TypeZenItemView extends ItemView {
@@ -40,19 +36,18 @@ interface TypewriterPointerListeners {
 
 const DEFAULT_SETTINGS: PluginSettings = {
 	animationDuration: 0.25,
-	showHeader: false,
 	showScroll: false,
-	showGraphControls: false,
-	forceReadable: true,
 	caretScrollDuration: 240,
 	caretVerticalPosition: 50,
 	pyPublisherPath: "/Users/atinucci/Desktop/AI_Projects/PyPublisher",
-	uvPath: "/Users/atinucci/.local/bin/uv",
 };
+
+const UV_EXECUTABLE = "/Users/atinucci/.local/bin/uv";
 
 export default class TypeZen extends Plugin {
 	settings: PluginSettings;
 	private publishing = false;
+	private zenFilePathEl: HTMLElement | null = null;
 
 	private zenLeaf: WorkspaceLeaf | null = null;
 	private escapeHandler: ((event: KeyboardEvent) => void) | null = null;
@@ -109,6 +104,7 @@ export default class TypeZen extends Plugin {
 					.onClick(() => this.compileFolder(file)));
 			}
 		}));
+		this.registerEvent(this.app.workspace.on("file-open", (file) => this.updateZenFilePath(file)));
 		this.addSettingTab(new TypeZenSettingTab(this.app, this));
 	}
 
@@ -118,9 +114,9 @@ export default class TypeZen extends Plugin {
 			return;
 		}
 		const project = this.settings.pyPublisherPath.trim();
-		const uv = this.resolveExecutable(this.settings.uvPath.trim());
-		if (!project || !uv) {
-			new Notice("Set the PyPublisher folder and uv executable in TypeZen settings.");
+		const uv = UV_EXECUTABLE;
+		if (!project) {
+			new Notice("Set the PyPublisher folder in TypeZen settings.");
 			return;
 		}
 		const adapter = this.app.vault.adapter;
@@ -213,7 +209,14 @@ export default class TypeZen extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const saved = ((await this.loadData()) ?? {}) as Partial<PluginSettings>;
+		this.settings = {
+			animationDuration: saved.animationDuration ?? DEFAULT_SETTINGS.animationDuration,
+			showScroll: saved.showScroll ?? DEFAULT_SETTINGS.showScroll,
+			caretScrollDuration: saved.caretScrollDuration ?? DEFAULT_SETTINGS.caretScrollDuration,
+			caretVerticalPosition: saved.caretVerticalPosition ?? DEFAULT_SETTINGS.caretVerticalPosition,
+			pyPublisherPath: saved.pyPublisherPath ?? DEFAULT_SETTINGS.pyPublisherPath,
+		};
 		if (!Number.isFinite(this.settings.caretScrollDuration)) {
 			this.settings.caretScrollDuration = DEFAULT_SETTINGS.caretScrollDuration;
 		}
@@ -276,6 +279,7 @@ export default class TypeZen extends Plugin {
 
 		const root = this.getZenRoot();
 		root.classList.add("typezen-fullscreen");
+		this.createZenFilePath(leaf);
 		requestAnimationFrame(() => {
 			if (this.isZenActive()) root.classList.add("animate");
 		});
@@ -294,9 +298,10 @@ export default class TypeZen extends Plugin {
 		this.getZenRoot().classList.remove(
 			"typezen-fullscreen",
 			"animate",
-			"typezen-show-header",
 			"typezen-hide-scroll",
 		);
+		this.zenFilePathEl?.remove();
+		this.zenFilePathEl = null;
 
 		const leaf = this.zenLeaf ?? this.app.workspace.getActiveViewOfType(ItemView)?.leaf;
 		if (leaf) {
@@ -346,7 +351,6 @@ export default class TypeZen extends Plugin {
 		this.applyCssVariables();
 
 		const root = this.getZenRoot();
-		root.classList.toggle("typezen-show-header", this.settings.showHeader);
 		root.classList.toggle("typezen-hide-scroll", !this.settings.showScroll);
 
 		const leaf = this.zenLeaf;
@@ -354,23 +358,46 @@ export default class TypeZen extends Plugin {
 
 		const view = this.getTypeZenView(leaf);
 		const isGraph = view.getViewType() === "graph";
-		view.headerEl.classList.toggle("hide", !this.settings.showHeader);
-		view.headerEl.classList.toggle("animate", this.settings.showHeader);
+		view.headerEl.classList.add("hide");
+		view.headerEl.classList.remove("animate");
 
 		if (isGraph) {
-			view.dataEngine?.controlsEl?.classList.toggle("hide", !this.settings.showGraphControls);
+			view.dataEngine?.controlsEl?.classList.add("hide");
 		} else {
 			this.applyReadableLineWidth(view);
 		}
 	}
 
-	private applyReadableLineWidth(view: TypeZenItemView, forceReadable = this.settings.forceReadable) {
+	private applyReadableLineWidth(view: TypeZenItemView, zenMode = true) {
 		const vault = this.app.vault as { getConfig?: (key: string) => unknown };
 		const readableLineLength = vault.getConfig?.("readableLineLength") === true;
 		view.editMode?.editorEl?.classList.toggle(
 			"is-readable-line-width",
-			forceReadable || readableLineLength,
+			zenMode || readableLineLength,
 		);
+	}
+
+	private createZenFilePath(leaf: WorkspaceLeaf) {
+		this.zenFilePathEl?.remove();
+		if (leaf.view.getViewType() !== "markdown") return;
+		const file = this.app.workspace.getActiveFile();
+		if (!file) return;
+		const pathEl = document.createElement("div");
+		pathEl.className = "typezen-file-path";
+		pathEl.textContent = file.path;
+		pathEl.setAttribute("aria-label", "Active file path");
+		this.getZenRoot().appendChild(pathEl);
+		this.zenFilePathEl = pathEl;
+	}
+
+	private updateZenFilePath(file: import("obsidian").TFile | null) {
+		if (!this.isZenActive() || !this.zenFilePathEl) return;
+		if (!file) {
+			this.zenFilePathEl.remove();
+			this.zenFilePathEl = null;
+			return;
+		}
+		this.zenFilePathEl.textContent = file.path;
 	}
 
 	private bindEscapeHandler() {
@@ -813,15 +840,6 @@ class TypeZenSettingTab extends PluginSettingTab {
 					this.plugin.settings.pyPublisherPath = value;
 					await this.plugin.saveSettings();
 				}));
-		new Setting(containerEl)
-			.setName("uv executable")
-			.setDesc("Use the absolute path to uv if Obsidian cannot find it.")
-			.addText((text) => text.setPlaceholder("uv")
-				.setValue(this.plugin.settings.uvPath)
-				.onChange(async (value) => {
-					this.plugin.settings.uvPath = value;
-					await this.plugin.saveSettings();
-				}));
 
 		containerEl.createEl("h3", { text: "Writing behavior" });
 		this.addSliderSetting(
@@ -859,29 +877,9 @@ class TypeZenSettingTab extends PluginSettingTab {
 		containerEl.createEl("h3", { text: "Element Toggles" });
 		this.addToggleSetting(
 			containerEl,
-			"Show header",
-			"Show the tab's header in Zen mode",
-			"showHeader",
-		);
-		this.addToggleSetting(
-			containerEl,
 			"Show scrollbar",
 			"Show the scrollbar in Zen mode. If it is hidden, scrolling is still available with mousewheel, arrows, touchpad, etc.",
 			"showScroll",
-		);
-		this.addToggleSetting(
-			containerEl,
-			"Show graph controls",
-			"Show the graph view's controls in Zen mode",
-			"showGraphControls",
-		);
-
-		containerEl.createEl("h3", { text: "Misc" });
-		this.addToggleSetting(
-			containerEl,
-			"Force content centering",
-			"Center text content in Zen mode, even if in regular view it takes all of the screen's width (ignore 'Editor -> Readable line length' being off in Zen mode)",
-			"forceReadable",
 		);
 	}
 
@@ -912,7 +910,7 @@ class TypeZenSettingTab extends PluginSettingTab {
 		containerEl: HTMLElement,
 		name: string,
 		desc: string,
-		key: "showHeader" | "showScroll" | "showGraphControls" | "forceReadable",
+		key: "showScroll",
 	) {
 		new Setting(containerEl)
 			.setName(name)

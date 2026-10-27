@@ -80,8 +80,22 @@
 	display: none !important;
 }
 
-.typezen-fullscreen:not(.typezen-show-header) .workspace-leaf-header {
+.typezen-fullscreen .workspace-leaf-header {
 	display: none !important;
+}
+
+.typezen-file-path {
+	position: fixed;
+	top: 0.6rem;
+	right: 1rem;
+	z-index: 16;
+	max-width: 70vw;
+	overflow: hidden;
+	color: var(--text-faint);
+	font-size: var(--font-smaller);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	pointer-events: none;
 }
 
 /* Making lists not have bullet points and instead have dashes */
