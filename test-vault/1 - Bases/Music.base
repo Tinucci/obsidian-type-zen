@@ -1,0 +1,30 @@
+filters:
+  and:
+    - file.inFolder("2 - Source Materials/Music Albums")
+    - genre.contains("Music")
+formulas:
+  Genre: genre.toString().split(", ").filter(value!="Music").join(", ")
+  Duration: duration(album_duration)
+  Untitled: notes
+  Rating: |-
+    if(rating, min(rating, 5) + "/5 " + if(rating / rating.round() == 1, if(rating == 5, "⭐".repeat(5), "🌕".repeat(min(rating, 5))), "🌕".repeat(min(rating, 5).floor()
+    ) + "🌗"))
+properties:
+  formula.Untitled:
+    displayName: Notes
+views:
+  - type: cards
+    name: View
+    order:
+      - file.name
+      - artist
+      - rating
+      - year
+      - formula.Genre
+      - formula.Untitled
+      - formula.Rating
+      - formula.Duration
+    sort:
+      - property: year
+        direction: ASC
+    image: note.cover

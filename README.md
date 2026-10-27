@@ -6,6 +6,22 @@ The true typewriting experience for Obsidian.
 
 TypeZen is an Obsidian Plugin to enhance the typewriting experience.
 
+## Compile with PyPublisher
+
+The PyPublisher project path defaults to `/Users/atinucci/Desktop/AI_Projects/PyPublisher`.
+Change it in TypeZen settings if the project is elsewhere. Set the path to the
+`uv` executable too if Obsidian cannot find it (for example, the result of
+`which uv` in a terminal). PyPublisher and its dependencies must already be
+installed; TypeZen runs `uv` with `--no-sync`.
+
+Open a note in a folder containing `compile_config.yaml` and run **TypeZen:
+Compile active note's folder with PyPublisher** from the command palette, or
+right-click that folder and select **Compile with PyPublisher**. PyPublisher
+writes its PDF and EPUB beside the configuration file. Compilation status is
+shown in Obsidian; failure details are available in the developer console.
+
+Run `npm test` to type-check and compile the plugin bundle.
+
 ## Development
 
 Install the locked dependencies, then build and copy the plugin to the local test vault:

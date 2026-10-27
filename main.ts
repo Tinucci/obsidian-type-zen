@@ -1,6 +1,8 @@
-import { App, ItemView, MarkdownView, Plugin, PluginSettingTab, Setting, WorkspaceLeaf } from "obsidian";
+import { App, FileSystemAdapter, ItemView, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFolder, WorkspaceLeaf } from "obsidian";
 import { Compartment, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { spawn } from "child_process";
+import { join } from "path";
 
 interface PluginSettings {
 	animationDuration: number;
@@ -10,6 +12,8 @@ interface PluginSettings {
 	forceReadable: boolean;
 	caretScrollDuration: number;
 	caretVerticalPosition: number;
+	pyPublisherPath: string;
+	uvPath: string;
 }
 
 interface TypeZenItemView extends ItemView {
@@ -40,10 +44,13 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	forceReadable: true,
 	caretScrollDuration: 240,
 	caretVerticalPosition: 50,
+	pyPublisherPath: "/Users/atinucci/Desktop/AI_Projects/PyPublisher",
+	uvPath: "uv",
 };
 
 export default class TypeZen extends Plugin {
 	settings: PluginSettings;
+	private publishing = false;
 
 	private zenLeaf: WorkspaceLeaf | null = null;
 	private escapeHandler: ((event: KeyboardEvent) => void) | null = null;
@@ -81,7 +88,73 @@ export default class TypeZen extends Plugin {
 			name: "Zen mode",
 			callback: () => this.toggleZenMode(),
 		});
+		this.addCommand({
+			id: "compile-with-pypublisher",
+			name: "Compile active note's folder with PyPublisher",
+			callback: () => {
+				const folder = this.app.workspace.getActiveFile()?.parent;
+				if (!folder) {
+					new Notice("Open a note in the manuscript folder first.");
+					return;
+				}
+				this.compileFolder(folder);
+			},
+		});
+		this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
+			if (file instanceof TFolder) {
+				menu.addItem((item) => item.setTitle("Compile with PyPublisher")
+					.setIcon("file-output")
+					.onClick(() => this.compileFolder(file)));
+			}
+		}));
 		this.addSettingTab(new TypeZenSettingTab(this.app, this));
+	}
+
+	private compileFolder(folder: TFolder) {
+		if (this.publishing) {
+			new Notice("PyPublisher is already compiling a folder.");
+			return;
+		}
+		const project = this.settings.pyPublisherPath.trim();
+		const uv = this.settings.uvPath.trim();
+		if (!project || !uv) {
+			new Notice("Set the PyPublisher folder and uv executable in TypeZen settings.");
+			return;
+		}
+		const adapter = this.app.vault.adapter;
+		if (!(adapter instanceof FileSystemAdapter)) {
+			new Notice("PyPublisher requires a local vault.");
+			return;
+		}
+		const configPath = folder.path === "/" ? "compile_config.yaml" : `${folder.path}/compile_config.yaml`;
+		if (!this.app.vault.getAbstractFileByPath(configPath)) {
+			new Notice(`No compile_config.yaml found in ${folder.path}.`);
+			return;
+		}
+		const folderPath = join(adapter.getBasePath(), folder.path === "/" ? "" : folder.path);
+		this.publishing = true;
+		new Notice(`Compiling ${folder.path} with PyPublisher…`);
+		const child = spawn(uv, ["run", "--no-sync", "python", "main.py", folderPath], { cwd: project });
+		let output = "";
+		let failedToStart = false;
+		child.stdout.on("data", (data: Buffer) => { output = (output + data.toString()).slice(-16000); });
+		child.stderr.on("data", (data: Buffer) => { output = (output + data.toString()).slice(-16000); });
+		child.on("error", (error) => {
+			failedToStart = true;
+			this.publishing = false;
+			console.error("PyPublisher could not start:", error);
+			new Notice(`Could not start PyPublisher: ${error.message}`, 10000);
+		});
+		child.on("close", (code) => {
+			if (failedToStart) return;
+			this.publishing = false;
+			if (code === 0) {
+				new Notice(`PyPublisher finished compiling ${folder.path}.`);
+			} else {
+				console.error("PyPublisher failed:", output);
+				new Notice(`PyPublisher failed (exit ${code}). See the developer console for details.`, 10000);
+			}
+		});
 	}
 
 	onunload() {
@@ -685,6 +758,26 @@ class TypeZenSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
+
+		containerEl.createEl("h3", { text: "PyPublisher" });
+		new Setting(containerEl)
+			.setName("PyPublisher folder")
+			.setDesc("Absolute path to the PyPublisher project folder.")
+			.addText((text) => text.setPlaceholder("/path/to/PyPublisher")
+				.setValue(this.plugin.settings.pyPublisherPath)
+				.onChange(async (value) => {
+					this.plugin.settings.pyPublisherPath = value;
+					await this.plugin.saveSettings();
+				}));
+		new Setting(containerEl)
+			.setName("uv executable")
+			.setDesc("Use the absolute path to uv if Obsidian cannot find it.")
+			.addText((text) => text.setPlaceholder("uv")
+				.setValue(this.plugin.settings.uvPath)
+				.onChange(async (value) => {
+					this.plugin.settings.uvPath = value;
+					await this.plugin.saveSettings();
+				}));
 
 		containerEl.createEl("h3", { text: "Writing behavior" });
 		this.addSliderSetting(
