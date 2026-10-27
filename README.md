@@ -13,7 +13,9 @@ Change it in TypeZen settings if the project is elsewhere. TypeZen searches
 common install locations for `uv` when Obsidian's app `PATH` cannot find it;
 you can set its absolute path in settings if it is installed elsewhere.
 PyPublisher and its dependencies must already be installed; TypeZen runs `uv`
-with `--no-sync`.
+with `--no-sync`. It adds common Homebrew and TeX paths to the subprocess PATH
+so tools such as Pandoc and XeLaTeX remain available when Obsidian was opened
+from the desktop.
 
 Open a note in a folder containing `compile_config.yaml` and run **TypeZen:
 Compile active note's folder with PyPublisher** from the command palette, or

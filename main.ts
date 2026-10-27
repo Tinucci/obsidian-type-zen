@@ -136,7 +136,10 @@ export default class TypeZen extends Plugin {
 		const folderPath = join(adapter.getBasePath(), folder.path === "/" ? "" : folder.path);
 		this.publishing = true;
 		new Notice(`Compiling ${folder.path} with PyPublisher…`);
-		const child = spawn(uv, ["run", "--no-sync", "python", "main.py", folderPath], { cwd: project });
+		const child = spawn(uv, ["run", "--no-sync", "python", "main.py", folderPath], {
+			cwd: project,
+			env: { ...process.env, PATH: this.getCommandPath() },
+		});
 		let output = "";
 		let failedToStart = false;
 		child.stdout.on("data", (data: Buffer) => { output = (output + data.toString()).slice(-16000); });
@@ -178,6 +181,21 @@ export default class TypeZen extends Plugin {
 			}
 		}
 		return executable;
+	}
+
+	private getCommandPath(): string {
+		const paths = [
+			...(process.env.PATH ?? "").split(delimiter),
+			"/opt/homebrew/bin",
+			"/opt/homebrew/sbin",
+			"/usr/local/bin",
+			"/usr/local/sbin",
+			"/Library/TeX/texbin",
+			"/usr/bin",
+			"/bin",
+			join(homedir(), ".local", "bin"),
+		];
+		return [...new Set(paths.filter(Boolean))].join(delimiter);
 	}
 
 	onunload() {
