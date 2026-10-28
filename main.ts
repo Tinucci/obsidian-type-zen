@@ -146,12 +146,13 @@ export default class TypeZen extends Plugin {
 			return;
 		}
 		const folderPath = join(adapter.getBasePath(), folder.path === "/" ? "" : folder.path);
+		const pypublisherPath = this.escapeGlobPath(folderPath);
 		this.publishing = true;
 		new Notice(`Compiling ${folder.path} with PyPublisher…`);
 		const commandEnv: NodeJS.ProcessEnv = { ...process.env, PATH: this.getCommandPath() };
 		const pandoc = this.resolveExecutable("pandoc");
 		if (pandoc !== "pandoc") commandEnv.PYPANDOC_PANDOC = pandoc;
-		const child = spawn(uv, ["run", "--no-sync", join(project, "main.py"), folderPath], {
+		const child = spawn(uv, ["run", "--no-sync", join(project, "main.py"), pypublisherPath], {
 			cwd: project,
 			env: commandEnv,
 		});
@@ -173,6 +174,16 @@ export default class TypeZen extends Plugin {
 			} else {
 				console.error("PyPublisher failed:", output);
 				new Notice(`PyPublisher failed (exit ${code}). See the developer console for details.`, 10000);
+			}
+		});
+	}
+
+	private escapeGlobPath(path: string): string {
+		return path.replace(/[?*\[]/g, (character) => {
+			switch (character) {
+				case "*": return "[*]";
+				case "?": return "[?]";
+				default: return "[[]";
 			}
 		});
 	}
