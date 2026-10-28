@@ -24,6 +24,12 @@ right-click that folder and select **Compile with PyPublisher**. PyPublisher
 writes its PDF and EPUB beside the configuration file. Compilation status is
 shown in Obsidian; failure details are available in the developer console.
 
+To create a starter `compile_config.md`, run **TypeZen: Create PyPublisher
+template for active note's folder** from the command palette or right-click a
+folder and select **Create PyPublisher template**. The initializer runs from the
+configured PyPublisher project directory and reports errors in the developer
+console.
+
 Run `npm test` to type-check and compile the plugin bundle.
 
 ## Development
