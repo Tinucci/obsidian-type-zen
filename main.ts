@@ -351,9 +351,6 @@ export default class TypeZen extends Plugin {
 		const root = this.getZenRoot();
 		root.classList.add("typezen-fullscreen");
 		this.createZenFilePath(leaf);
-		requestAnimationFrame(() => {
-			if (this.isZenActive()) root.classList.add("animate");
-		});
 
 		this.zenLeaf = leaf;
 		this.applyZenSettings();
@@ -368,7 +365,6 @@ export default class TypeZen extends Plugin {
 
 		this.getZenRoot().classList.remove(
 			"typezen-fullscreen",
-			"animate",
 			"typezen-hide-scroll",
 		);
 		this.zenFilePathEl?.remove();
@@ -859,8 +855,6 @@ export default class TypeZen extends Plugin {
 		const viewEl = view.contentEl;
 		const isGraph = view.getViewType() === "graph";
 
-		// Clear classes left behind by earlier versions that applied vignette gradients.
-		viewEl.classList.remove("vignette-linear", "vignette-radial");
 		viewEl.classList.add("animate");
 
 		if (!isGraph) {
@@ -882,7 +876,7 @@ export default class TypeZen extends Plugin {
 			this.applyReadableLineWidth(view, false);
 		}
 
-		viewEl.classList.remove("vignette-linear", "vignette-radial", "animate");
+		viewEl.classList.remove("animate");
 		header.classList.remove("animate", "hide");
 
 		this.disableTypewriter();
