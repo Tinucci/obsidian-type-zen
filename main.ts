@@ -9,6 +9,7 @@ import { homedir } from "os";
 interface PluginSettings {
 	animationDuration: number;
 	showScroll: boolean;
+	transparency: boolean;
 	caretScrollDuration: number;
 	caretVerticalPosition: number;
 	pyPublisherPath: string;
@@ -37,6 +38,7 @@ interface TypewriterPointerListeners {
 const DEFAULT_SETTINGS: PluginSettings = {
 	animationDuration: 0.25,
 	showScroll: false,
+	transparency: true,
 	caretScrollDuration: 240,
 	caretVerticalPosition: 50,
 	pyPublisherPath: "/Users/atinucci/Desktop/AI_Projects/PyPublisher",
@@ -80,6 +82,7 @@ export default class TypeZen extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+		this.applyTransparencySetting();
 		this.addCommand({
 			id: "zenmode",
 			name: "Zen mode",
@@ -269,6 +272,7 @@ export default class TypeZen extends Plugin {
 	}
 
 	onunload() {
+		document.body.classList.remove("typezen-transparency");
 		const flushSliderSettings = this.sliderSettingsSaveTimer !== null;
 		this.cancelSliderSettingsSave();
 		if (this.isZenActive()) {
@@ -284,6 +288,7 @@ export default class TypeZen extends Plugin {
 		this.settings = {
 			animationDuration: saved.animationDuration ?? DEFAULT_SETTINGS.animationDuration,
 			showScroll: saved.showScroll ?? DEFAULT_SETTINGS.showScroll,
+			transparency: saved.transparency ?? DEFAULT_SETTINGS.transparency,
 			caretScrollDuration: saved.caretScrollDuration ?? DEFAULT_SETTINGS.caretScrollDuration,
 			caretVerticalPosition: saved.caretVerticalPosition ?? DEFAULT_SETTINGS.caretVerticalPosition,
 			pyPublisherPath: saved.pyPublisherPath ?? DEFAULT_SETTINGS.pyPublisherPath,
@@ -300,10 +305,15 @@ export default class TypeZen extends Plugin {
 
 	async saveSettings() {
 		this.cancelSliderSettingsSave();
+		this.applyTransparencySetting();
 		await this.saveData(this.settings);
 		if (this.isZenActive()) {
 			this.applyZenSettings();
 		}
+	}
+
+	private applyTransparencySetting() {
+		document.body.classList.toggle("typezen-transparency", this.settings.transparency);
 	}
 
 	scheduleSliderSettingsSave() {
@@ -351,9 +361,6 @@ export default class TypeZen extends Plugin {
 		const root = this.getZenRoot();
 		root.classList.add("typezen-fullscreen");
 		this.createZenFilePath(leaf);
-		requestAnimationFrame(() => {
-			if (this.isZenActive()) root.classList.add("animate");
-		});
 
 		this.zenLeaf = leaf;
 		this.applyZenSettings();
@@ -368,7 +375,6 @@ export default class TypeZen extends Plugin {
 
 		this.getZenRoot().classList.remove(
 			"typezen-fullscreen",
-			"animate",
 			"typezen-hide-scroll",
 		);
 		this.zenFilePathEl?.remove();
@@ -859,8 +865,6 @@ export default class TypeZen extends Plugin {
 		const viewEl = view.contentEl;
 		const isGraph = view.getViewType() === "graph";
 
-		// Clear classes left behind by earlier versions that applied vignette gradients.
-		viewEl.classList.remove("vignette-linear", "vignette-radial");
 		viewEl.classList.add("animate");
 
 		if (!isGraph) {
@@ -882,7 +886,7 @@ export default class TypeZen extends Plugin {
 			this.applyReadableLineWidth(view, false);
 		}
 
-		viewEl.classList.remove("vignette-linear", "vignette-radial", "animate");
+		viewEl.classList.remove("animate");
 		header.classList.remove("animate", "hide");
 
 		this.disableTypewriter();
@@ -948,6 +952,12 @@ class TypeZenSettingTab extends PluginSettingTab {
 		containerEl.createEl("h3", { text: "Element Toggles" });
 		this.addToggleSetting(
 			containerEl,
+			"Translucent fullscreen",
+			"Allow window translucency in Zen mode and macOS fullscreen when Obsidian's Translucent window setting is enabled.",
+			"transparency",
+		);
+		this.addToggleSetting(
+			containerEl,
 			"Show scrollbar",
 			"Show the scrollbar in Zen mode. If it is hidden, scrolling is still available with mousewheel, arrows, touchpad, etc.",
 			"showScroll",
@@ -981,7 +991,7 @@ class TypeZenSettingTab extends PluginSettingTab {
 		containerEl: HTMLElement,
 		name: string,
 		desc: string,
-		key: "showScroll",
+		key: "showScroll" | "transparency",
 	) {
 		new Setting(containerEl)
 			.setName(name)
