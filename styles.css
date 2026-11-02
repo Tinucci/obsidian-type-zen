@@ -63,14 +63,6 @@
 	max-width: 60vw;
 }
 
-.typezen-mobile-exit {
-	position: fixed;
-	top: calc(var(--typezen-viewport-top, 0px) + env(safe-area-inset-top, 0px) + 0.35rem);
-	left: calc(env(safe-area-inset-left, 0px) + 0.5rem);
-	z-index: 20;
-	min-height: 44px;
-}
-
 /* Obsidian paints the root view opaque even in translucent windows. */
 body.typezen-transparency.is-translucent .typezen-fullscreen .workspace-split.mod-root .view-content {
 	background-color: transparent !important;

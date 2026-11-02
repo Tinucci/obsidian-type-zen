@@ -46,7 +46,6 @@ export default class TypeZen extends Plugin {
 	settings: PluginSettings;
 	private publishing = false;
 	private zenFilePathEl: HTMLElement | null = null;
-	private mobileExitEl: HTMLElement | null = null;
 	private mobileViewportHandler: (() => void) | null = null;
 
 	private zenLeaf: WorkspaceLeaf | null = null;
@@ -406,14 +405,6 @@ export default class TypeZen extends Plugin {
 	private setupMobileZen() {
 		const root = this.getZenRoot();
 		root.classList.add("typezen-mobile");
-		const button = document.createElement("button");
-		button.className = "typezen-mobile-exit";
-		button.setAttribute("aria-label", "Exit Zen mode");
-		button.textContent = "Exit Zen";
-		button.addEventListener("click", () => this.exitZen());
-		root.appendChild(button);
-		this.mobileExitEl = button;
-
 		const viewport = window.visualViewport;
 		if (!viewport) return;
 		this.mobileViewportHandler = () => {
@@ -433,8 +424,6 @@ export default class TypeZen extends Plugin {
 			viewport.removeEventListener("scroll", this.mobileViewportHandler);
 		}
 		this.mobileViewportHandler = null;
-		this.mobileExitEl?.remove();
-		this.mobileExitEl = null;
 		root.classList.remove("typezen-mobile");
 		root.style.removeProperty("--typezen-viewport-height");
 		root.style.removeProperty("--typezen-viewport-top");
