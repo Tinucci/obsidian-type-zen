@@ -1,0 +1,34 @@
+---
+author:
+  - "C.S. Lewis"
+publisher: "Harper One"
+series:
+seriesNumber:
+dateRelease: 1961-01-01
+genre:
+  - "Nonfiction"
+  - "Christian"
+  - "Religion"
+  - "Grief"
+  - "Theology"
+  - "Classics"
+  - "Christianity"
+language:
+cover: "https://m.media-amazon.com/images/S/compressed.photo.goodreads.com/books/1439250484i/26077627.jpg"
+url: "https://www.goodreads.com/book/show/26077627-a-grief-observed"
+format: "book"
+pages: 76
+status: "tbd"
+dateAdded: 2026-11-02
+dateStarted:
+dateFinished:
+rating:
+---
+## Notes
+
+## Description
+Written with love, humility, and faith, this brief but poignant volume was first published in 1961 and concerns the death of C. S. Lewis's wife, the American-born poet Joy Davidman. In her introduction to this new edition, Madeleine L'Engle writes: "I am grateful to Lewis for having the courage to yell, to doubt, to kick at God in angry violence. This is a part of a healthy grief which is not often encouraged. It is helpful indeed that C. S. Lewis, who has been such a successful apologist for Christianity, should have the courage to admit doubt about what he has so superbly proclaimed. It gives us permission to admit our own doubts, our own angers and anguishes, and to know that they are part of the soul's growth."  
+  
+Written in longhand in notebooks that Lewis found in his home, A Grief Observed probes the "mad midnight moments" of Lewis's mourning and loss, moments in which he questioned what he had previously believed about life and death, marriage, and even God. Indecision and self-pity assailed Lewis. "We are under the harrow and can't escape," he writes. "I know that the thing I want is exactly the thing I can never get. The old life, the jokes, the drinks, the arguments, the lovemaking, the tiny, heartbreaking commonplace." Writing A Grief Observed as "a defense against total collapse, a safety valve," he came to recognize that "bereavement is a universal and integral part of our experience of love."  
+  
+Lewis writes his statement of faith with precision, humor, and grace. Yet neither is Lewis reluctant to confess his continuing doubts and his awareness of his own human frailty. This is precisely the quality which suggests that A Grief Observed may become "among the great devotional books of our age."

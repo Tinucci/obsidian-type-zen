@@ -1,7 +1,6 @@
 filters:
   and:
-    - file.inFolder("2 - Source Materials/Music Albums")
-    - genre.contains("Music")
+    - file.inFolder("Resources/Bases/Books")
 formulas:
   Genre: genre.toString().split(", ").filter(value!="Music").join(", ")
   Duration: duration(album_duration)
@@ -28,3 +27,4 @@ views:
       - property: year
         direction: ASC
     image: note.cover
+    imageAspectRatio: 0.45
