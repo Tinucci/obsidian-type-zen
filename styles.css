@@ -48,6 +48,29 @@
 	overflow: hidden; /* hides native scrollbars */
 }
 
+.typezen-fullscreen.typezen-mobile .workspace-leaf.active,
+.typezen-fullscreen.typezen-mobile .workspace-leaf.mod-active {
+	top: var(--typezen-viewport-top, 0px);
+	height: var(--typezen-viewport-height, 100dvh) !important;
+	padding-top: calc(env(safe-area-inset-top, 0px) + 3rem);
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+	box-sizing: border-box;
+}
+
+.typezen-fullscreen.typezen-mobile .typezen-file-path {
+	top: calc(var(--typezen-viewport-top, 0px) + env(safe-area-inset-top, 0px) + 1rem);
+	right: calc(env(safe-area-inset-right, 0px) + 1rem);
+	max-width: 60vw;
+}
+
+.typezen-mobile-exit {
+	position: fixed;
+	top: calc(var(--typezen-viewport-top, 0px) + env(safe-area-inset-top, 0px) + 0.35rem);
+	left: calc(env(safe-area-inset-left, 0px) + 0.5rem);
+	z-index: 20;
+	min-height: 44px;
+}
+
 /* Obsidian paints the root view opaque even in translucent windows. */
 body.typezen-transparency.is-translucent .typezen-fullscreen .workspace-split.mod-root .view-content {
 	background-color: transparent !important;
