@@ -6,5 +6,5 @@
 	"description": "Enter Type Zen mode to focus on writing.",
 	"author": "Tinucci",
 	"authorUrl": "https://github.com/Tinucci",
-	"isDesktopOnly": true
+	"isDesktopOnly": false
 }

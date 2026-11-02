@@ -1,10 +1,6 @@
-import { App, FileSystemAdapter, ItemView, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFolder, WorkspaceLeaf } from "obsidian";
+import { App, FileSystemAdapter, ItemView, Platform, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFolder, WorkspaceLeaf } from "obsidian";
 import { Compartment, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { spawn } from "child_process";
-import { accessSync, constants } from "fs";
-import { delimiter, join } from "path";
-import { homedir } from "os";
 
 interface PluginSettings {
 	animationDuration: number;
@@ -50,6 +46,7 @@ export default class TypeZen extends Plugin {
 	settings: PluginSettings;
 	private publishing = false;
 	private zenFilePathEl: HTMLElement | null = null;
+	private mobileViewportHandler: (() => void) | null = null;
 
 	private zenLeaf: WorkspaceLeaf | null = null;
 	private escapeHandler: ((event: KeyboardEvent) => void) | null = null;
@@ -88,45 +85,49 @@ export default class TypeZen extends Plugin {
 			name: "Zen mode",
 			callback: () => this.toggleZenMode(),
 		});
-		this.addCommand({
-			id: "compile-with-pypublisher",
-			name: "Compile active note's folder with PyPublisher",
-			callback: () => {
-				const folder = this.app.workspace.getActiveFile()?.parent;
-				if (!folder) {
-					new Notice("Open a note in the manuscript folder first.");
-					return;
+		if (Platform.isDesktopApp) {
+			this.addCommand({
+				id: "compile-with-pypublisher",
+				name: "Compile active note's folder with PyPublisher",
+				callback: () => {
+					const folder = this.app.workspace.getActiveFile()?.parent;
+					if (!folder) {
+						new Notice("Open a note in the manuscript folder first.");
+						return;
+					}
+					this.compileFolder(folder);
+				},
+			});
+			this.addCommand({
+				id: "initialize-pypublisher-config",
+				name: "Create PyPublisher template for active note's folder",
+				callback: () => {
+					const folder = this.app.workspace.getActiveFile()?.parent;
+					if (!folder) {
+						new Notice("Open a note in the manuscript folder first.");
+						return;
+					}
+					this.initializeConfig(folder);
+				},
+			});
+			this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
+				if (file instanceof TFolder) {
+					menu.addItem((item) => item.setTitle("Compile with PyPublisher")
+						.setIcon("file-output")
+						.onClick(() => this.compileFolder(file)));
+					menu.addItem((item) => item.setTitle("Create PyPublisher template")
+						.setIcon("file-plus")
+						.onClick(() => this.initializeConfig(file)));
 				}
-				this.compileFolder(folder);
-			},
-		});
-		this.addCommand({
-			id: "initialize-pypublisher-config",
-			name: "Create PyPublisher template for active note's folder",
-			callback: () => {
-				const folder = this.app.workspace.getActiveFile()?.parent;
-				if (!folder) {
-					new Notice("Open a note in the manuscript folder first.");
-					return;
-				}
-				this.initializeConfig(folder);
-			},
-		});
-		this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
-			if (file instanceof TFolder) {
-				menu.addItem((item) => item.setTitle("Compile with PyPublisher")
-					.setIcon("file-output")
-					.onClick(() => this.compileFolder(file)));
-				menu.addItem((item) => item.setTitle("Create PyPublisher template")
-					.setIcon("file-plus")
-					.onClick(() => this.initializeConfig(file)));
-			}
-		}));
+			}));
+		}
 		this.registerEvent(this.app.workspace.on("file-open", (file) => this.updateZenFilePath(file)));
 		this.addSettingTab(new TypeZenSettingTab(this.app, this));
 	}
 
 	private compileFolder(folder: TFolder) {
+		const { spawn } = require("child_process") as typeof import("child_process");
+		const { join } = require("path") as typeof import("path");
 		if (this.publishing) {
 			new Notice("PyPublisher is already compiling a folder.");
 			return;
@@ -192,6 +193,8 @@ export default class TypeZen extends Plugin {
 	}
 
 	private initializeConfig(folder: TFolder) {
+		const { spawn } = require("child_process") as typeof import("child_process");
+		const { join } = require("path") as typeof import("path");
 		if (this.publishing) {
 			new Notice("PyPublisher is already running a task.");
 			return;
@@ -236,6 +239,9 @@ export default class TypeZen extends Plugin {
 	}
 
 	private resolveExecutable(executable: string): string {
+		const { accessSync, constants } = require("fs") as typeof import("fs");
+		const { delimiter, join } = require("path") as typeof import("path");
+		const { homedir } = require("os") as typeof import("os");
 		if (!executable || executable.includes("/") || executable.includes("\\")) return executable;
 		const directories = [
 			...(process.env.PATH ?? "").split(delimiter),
@@ -257,6 +263,8 @@ export default class TypeZen extends Plugin {
 	}
 
 	private getCommandPath(): string {
+		const { delimiter, join } = require("path") as typeof import("path");
+		const { homedir } = require("os") as typeof import("os");
 		const paths = [
 			...(process.env.PATH ?? "").split(delimiter),
 			"/opt/homebrew/bin",
@@ -361,6 +369,7 @@ export default class TypeZen extends Plugin {
 		const root = this.getZenRoot();
 		root.classList.add("typezen-fullscreen");
 		this.createZenFilePath(leaf);
+		if (Platform.isMobile) this.setupMobileZen();
 
 		this.zenLeaf = leaf;
 		this.applyZenSettings();
@@ -372,6 +381,7 @@ export default class TypeZen extends Plugin {
 	private exitZen() {
 		this.cancelEditorSetup();
 		this.unbindEscapeHandler();
+		this.cleanupMobileZen();
 
 		this.getZenRoot().classList.remove(
 			"typezen-fullscreen",
@@ -390,6 +400,33 @@ export default class TypeZen extends Plugin {
 
 		// Always switch to Reading mode when exiting Zen Mode.
 		this.setMarkdownMode("preview");
+	}
+
+	private setupMobileZen() {
+		const root = this.getZenRoot();
+		root.classList.add("typezen-mobile");
+		const viewport = window.visualViewport;
+		if (!viewport) return;
+		this.mobileViewportHandler = () => {
+			root.style.setProperty("--typezen-viewport-height", `${viewport.height}px`);
+			root.style.setProperty("--typezen-viewport-top", `${viewport.offsetTop}px`);
+		};
+		this.mobileViewportHandler();
+		viewport.addEventListener("resize", this.mobileViewportHandler);
+		viewport.addEventListener("scroll", this.mobileViewportHandler);
+	}
+
+	private cleanupMobileZen() {
+		const root = this.getZenRoot();
+		const viewport = window.visualViewport;
+		if (viewport && this.mobileViewportHandler) {
+			viewport.removeEventListener("resize", this.mobileViewportHandler);
+			viewport.removeEventListener("scroll", this.mobileViewportHandler);
+		}
+		this.mobileViewportHandler = null;
+		root.classList.remove("typezen-mobile");
+		root.style.removeProperty("--typezen-viewport-height");
+		root.style.removeProperty("--typezen-viewport-top");
 	}
 
 	private applyCssVariables() {
@@ -905,17 +942,18 @@ class TypeZenSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h3", { text: "PyPublisher" });
-		new Setting(containerEl)
-			.setName("PyPublisher folder")
-			.setDesc("Absolute path to the PyPublisher project folder.")
-			.addText((text) => text.setPlaceholder("/path/to/PyPublisher")
-				.setValue(this.plugin.settings.pyPublisherPath)
-				.onChange(async (value) => {
-					this.plugin.settings.pyPublisherPath = value;
-					await this.plugin.saveSettings();
-				}));
-
+		if (Platform.isDesktopApp) {
+			containerEl.createEl("h3", { text: "PyPublisher" });
+			new Setting(containerEl)
+				.setName("PyPublisher folder")
+				.setDesc("Absolute path to the PyPublisher project folder.")
+				.addText((text) => text.setPlaceholder("/path/to/PyPublisher")
+					.setValue(this.plugin.settings.pyPublisherPath)
+					.onChange(async (value) => {
+						this.plugin.settings.pyPublisherPath = value;
+						await this.plugin.saveSettings();
+					}));
+		}
 		containerEl.createEl("h3", { text: "Writing behavior" });
 		this.addSliderSetting(
 			containerEl,

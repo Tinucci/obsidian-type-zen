@@ -16,6 +16,8 @@ discovered Pandoc executable to PyPublisher.
 
 Zen mode hides the Obsidian tab header and shows only the active note's vault
 path. Content centering is always enabled, and graph controls remain hidden.
+Run the **Zen mode** command again to return to the normal workspace. PyPublisher
+commands and settings are available on desktop only.
 
 Open a note in a folder containing `compile_config.yaml` or `compile_config.md`
 and run **TypeZen:
