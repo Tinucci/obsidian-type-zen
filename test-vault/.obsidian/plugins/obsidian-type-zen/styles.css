@@ -49,7 +49,27 @@
 }
 
 /* Obsidian paints the root view opaque even in translucent windows. */
-body.is-translucent .typezen-fullscreen .workspace-split.mod-root .view-content {
+body.typezen-transparency.is-translucent .typezen-fullscreen .workspace-split.mod-root .view-content {
+	background-color: transparent !important;
+}
+
+/* Preserve Obsidian's translucent window styling in macOS fullscreen. */
+body.typezen-transparency.mod-macos.is-translucent.is-fullscreen .titlebar,
+body.typezen-transparency.mod-macos.is-translucent.is-fullscreen .app-container {
+	background-color: var(--workspace-background-translucent);
+}
+
+body.typezen-transparency.mod-macos.is-translucent.is-fullscreen .workspace-ribbon.mod-primary,
+body.typezen-transparency.mod-macos.is-translucent.is-fullscreen .workspace-ribbon.mod-primary:before,
+body.typezen-transparency.mod-macos.is-translucent.is-fullscreen .workspace-tabs,
+body.typezen-transparency.mod-macos.is-translucent.is-fullscreen .workspace-split,
+body.typezen-transparency.mod-macos.is-translucent.is-fullscreen .sidebar-toggle-button,
+body.typezen-transparency.mod-macos.is-translucent.is-fullscreen .mod-primary-split .workspace-tab-header-container,
+body.typezen-transparency.mod-macos.is-translucent.is-fullscreen .mod-secondary-split .workspace-tab-header-container,
+body.typezen-transparency.mod-macos.is-translucent.is-fullscreen .mod-top .workspace-tab-header-container,
+body.typezen-transparency.mod-macos.is-translucent.is-fullscreen .workspace-tabs .workspace-leaf,
+body.typezen-transparency.mod-macos.is-translucent.is-fullscreen .workspace-sidedock-vault-profile,
+body.typezen-transparency.mod-macos.is-translucent.is-fullscreen .workspace-split.mod-root .view-content {
 	background-color: transparent !important;
 }
 
